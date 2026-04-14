@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no"/>
+<title>NEAR — Live POI Explorer</title>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet"/>
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #060912;
+    --surface: rgba(10,14,22,0.96);
+    --surface2: rgba(20,26,38,0.9);
+    --border: rgba(255,255,255,0.08);
+    --text: #e2e8f4;
+    --muted: #4a5878;
+    --accent: #5eead4;
+    --accent2: #818cf8;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; overflow:hidden; font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(--text); touch-action:manipulation; }
+  
+  #map { position:fixed; inset:0; }
+  .mapboxgl-canvas { will-change:transform; }
+
+  /* ── HEADER ── */
+  #header {
+    position:fixed; top:0; left:0; right:0; z-index:200;
+    padding:16px;
+    background:linear-gradient(180deg,rgba(6,9,18,0.98) 0%,rgba(6,9,18,0.85) 60%,transparent 100%);
+    pointer-events:none;
+  }
+  #header-inner { display:flex; align-items:center; gap:14px; pointer-events:all; }
+
+  .wordmark {
+    font-family:'Space Mono',monospace; font-weight:700; font-size:22px;
+    letter-spacing:0.18em; color:var(--accent); flex-shrink:0;
+    text-shadow:0 0 20px rgba(94,234,212,0.5);
+  }
+
+  #search-wrap { flex:1; position:relative; }
+  #search-input {
+    width:100%; background:var(--surface); border:1px solid var(--border);
+    border-radius:16px; padding:14px 44px 14px 18px; height:52px;
+    font-family:'Space Grotesk',sans-serif; font-size:17px; color:var(--text);
+    outline:none; transition:border-color 0.2s, box-shadow 0.2s;
+    backdrop-filter:blur(20px); box-shadow:0 6px 16px rgba(0,0,0,0.4);
+  }
+  #search-input::placeholder { color:var(--muted); }
+  #search-input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(94,234,212,0.1); }
+  .search-icon { position:absolute; right:14px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none; }
+
+  #ac-list {
+    display:none; position:absolute; top:calc(100% + 8px); left:0; right:0;
+    background:rgba(10,14,22,0.98); border:1px solid var(--border); border-radius:16px;
+    overflow:hidden; z-index:300; box-shadow:0 20px 60px rgba(0,0,0,0.7);
+    backdrop-filter:blur(20px);
+  }
+  .ac-item {
+    padding:14px 16px; cursor:pointer;
+    border-bottom:1px solid var(--border);
+    display:flex; align-items:center; gap:12px; transition:background 0.12s;
+  }
+  .ac-item:last-child { border-bottom:none; }
+  .ac-item:hover, .ac-item:active { background:var(--surface2); }
+  .ac-name { font-weight:600; font-size:15px; }
+  .ac-place { font-size:12px; color:var(--muted); font-family:'Space Mono',monospace; margin-top:2px; }
+
+  /* ── LOCATE BTN ── */
+  #locate-btn {
+    position:fixed; top:76px; right:16px; z-index:190;
+    width:48px; height:48px; border-radius:14px;
+    background:var(--surface); border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; transition:all 0.2s; backdrop-filter:blur(20px);
+    color:var(--accent); box-shadow:0 8px 24px rgba(0,0,0,0.5);
+  }
+  #locate-btn:hover { background:var(--surface2); transform:scale(1.05); }
+  #locate-btn:active { transform:scale(0.95); }
+  #locate-btn.pulsing { animation:locatePulse 1s ease-in-out infinite; }
+  @keyframes locatePulse { 0%,100%{box-shadow:0 0 0 0 rgba(94,234,212,0.4)} 50%{box-shadow:0 0 0 10px rgba(94,234,212,0)} }
+
+  /* ── BOTTOM SHEET ── */
+  #sheet {
+    position:fixed; bottom:0; left:0; right:0; z-index:180;
+    max-height:88vh; display:flex; flex-direction:column;
+    background:rgba(8,12,20,0.98); border-top:1px solid var(--border);
+    border-radius:32px 32px 0 0; backdrop-filter:blur(24px);
+    transform:translateY(calc(100% - 180px));
+    transition:transform 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+    will-change:transform; padding-top:8px;
+    box-shadow: 0 -10px 40px rgba(0,0,0,0.6);
+  }
+  #sheet.expanded { transform:translateY(0); }
+  #sheet.peek { transform:translateY(calc(100% - 190px)); }
+  #sheet.collapsed { transform:translateY(calc(100% - 70px)); }
+
+  .sheet-handle {
+    width:64px; height:5px; background:rgba(255,255,255,0.2); border-radius:3px;
+    margin:12px auto 0; flex-shrink:0; cursor:grab;
+  }
+
+  /* Filter pills / Modern Nav Bar */
+  #filter-bar {
+    padding:16px 20px 0; flex-shrink:0;
+    display:flex; align-items:center; gap:12px; overflow-x:auto;
+    scrollbar-width:none; -ms-overflow-style:none;
+    -webkit-overflow-scrolling:touch; margin-bottom:4px;
+  }
+  #filter-bar::-webkit-scrollbar { display:none; }
+
+  .cat-pill {
+    display:flex; align-items:center; gap:8px; padding:12px 20px;
+    border-radius:18px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05);
+    color:var(--text); font-family:'Space Grotesk',sans-serif; font-size:15px; font-weight:600;
+    cursor:pointer; transition:all 0.3s cubic-bezier(0.2,0.8,0.2,1); white-space:nowrap; flex-shrink:0;
+    backdrop-filter:blur(12px); box-shadow:0 4px 16px rgba(0,0,0,0.1);
+  }
+  .cat-pill .pill-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .cat-pill .pill-cnt { font-family:'Space Mono',monospace; font-size:11px; opacity:0.6; transition:opacity 0.2s; }
+  
+  .cat-pill.active { 
+    background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.15); 
+    box-shadow:0 8px 24px rgba(0,0,0,0.25); transform:translateY(-2px);
+  }
+  .cat-pill.active .pill-cnt { opacity: 0.9; }
+  .cat-pill.off { opacity:0.4; transform:scale(0.96); box-shadow:none; }
+  .cat-pill:active { transform:scale(0.92); }
+
+  /* Detail area */
+  #detail-area { padding:16px 16px 10px; flex-shrink:0; }
+  #detail-badge {
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:'Space Mono',monospace; font-size:10px; letter-spacing:0.12em;
+    padding:4px 10px; border-radius:6px; margin-bottom:8px;
+    background:rgba(255,255,255,0.06); font-weight:700;
+  }
+  #detail-name { font-size:20px; font-weight:700; line-height:1.2; margin-bottom:4px; }
+  #detail-addr { font-size:13px; color:var(--muted); font-family:'Space Mono',monospace; line-height:1.4; }
+
+  /* Nearby list */
+  .nearby-head {
+    padding:10px 16px 4px; font-family:'Space Mono',monospace;
+    font-size:10px; letter-spacing:0.14em; color:var(--muted); flex-shrink:0;
+    display:flex; align-items:center; gap:8px;
+  }
+  #nearby-list { flex:1; overflow-y:auto; padding:0 12px 80px; -webkit-overflow-scrolling:touch; }
+  
+  .nearby-item {
+    display:flex; align-items:center; gap:14px; padding:16px;
+    border-radius:20px; cursor:pointer; transition:all 0.2s;
+    background:rgba(20,26,38,0.4); margin-bottom:10px;
+    border:1px solid transparent;
+  }
+  .nearby-item:active { background:var(--surface2); transform:scale(0.98); }
+  .nearby-item:hover { border-color:rgba(255,255,255,0.05); }
+  .ni-pip { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+  .ni-info { flex:1; min-width:0; }
+  .ni-name { font-size:17px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ni-sub  { font-size:12px; font-family:'Space Mono',monospace; color:var(--muted); margin-top:4px; }
+  .ni-dist { font-size:14px; font-family:'Space Mono',monospace; color:var(--accent); white-space:nowrap; flex-shrink:0; font-weight:700; }
+  .ni-nearest-badge {
+    font-size:9px; font-family:'Space Mono',monospace; letter-spacing:0.1em;
+    padding:2px 6px; border-radius:4px; background:rgba(94,234,212,0.12);
+    color:var(--accent); white-space:nowrap;
+  }
+
+  /* ── MAPBOX overrides ── */
+  .mapboxgl-ctrl-group { background:var(--surface)!important; border:1px solid var(--border)!important; border-radius:12px!important; backdrop-filter:blur(20px)!important; }
+  .mapboxgl-ctrl-icon { filter:invert(0.8) brightness(0.6); }
+  .mapboxgl-ctrl-top-left { top:134px!important; left:16px!important; }
+  .mapboxgl-ctrl-attrib, .mapboxgl-ctrl-logo { display:none!important; }
+  .mapboxgl-popup-content {
+    background:rgba(10,14,22,0.98)!important; border:1px solid var(--border)!important;
+    border-radius:16px!important; padding:16px!important;
+    color:var(--text)!important; font-family:'Space Grotesk',sans-serif!important;
+    box-shadow:0 20px 50px rgba(0,0,0,0.8)!important; min-width:200px;
+    backdrop-filter:blur(20px)!important;
+  }
+  .mapboxgl-popup-tip { display:none!important; }
+  .pu-name { font-size:17px; font-weight:700; margin-bottom:4px; }
+  .pu-cat  { font-size:12px; font-family:'Space Mono',monospace; letter-spacing:0.08em; margin-bottom:6px; font-weight:700; }
+  .pu-addr { font-size:13px; color:var(--muted); margin-bottom:14px; line-height:1.4; }
+  .pu-row  { display:flex; gap:10px; }
+  .pu-btn  {
+    flex:1; padding:12px; background:var(--accent);
+    border:none; border-radius:12px; font-family:'Space Grotesk',sans-serif;
+    font-weight:700; font-size:14px; color:#000; cursor:pointer;
+    letter-spacing:0.04em; transition:transform 0.1s;
+  }
+  .pu-btn:active { transform:scale(0.96); }
+  .pu-btn-sec {
+    padding:12px; background:var(--surface2); border:1px solid var(--border);
+    border-radius:12px; font-family:'Space Grotesk',sans-serif;
+    font-weight:600; font-size:14px; color:var(--text); cursor:pointer;
+  }
+
+  /* ── MARKERS ── */
+  .mk-user {
+    width:20px; height:20px; border-radius:50%; background:var(--accent);
+    border:3px solid #fff; box-shadow:0 0 0 8px rgba(94,234,212,0.2);
+    position:relative; z-index:10;
+  }
+  .mk-user-ring {
+    position:absolute; width:60px; height:60px;
+    border-radius:50%; background:rgba(94,234,212,0.12);
+    top:50%; left:50%; transform:translate(-50%,-50%);
+    animation:userRipple 2s ease-out infinite;
+    pointer-events:none;
+  }
+  @keyframes userRipple {
+    0% { transform:translate(-50%,-50%) scale(0.5); opacity:1; }
+    100% { transform:translate(-50%,-50%) scale(2); opacity:0; }
+  }
+
+  .mk-poi {
+    width:36px; height:36px; border-radius:50%;
+    border:2px solid rgba(255,255,255,0.15);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; position:relative;
+    transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s;
+    will-change:transform;
+  }
+  .mk-poi > svg { width: 16px; height: 16px; }
+  .mk-poi:hover { transform:scale(1.2); z-index:5; }
+  .mk-poi.selected { transform:scale(1.35); border-color:rgba(255,255,255,0.6); z-index:20; }
+  .mk-poi.nearest::after {
+    content:''; position:absolute; inset:-5px;
+    border-radius:50%; border:2px solid currentColor;
+    animation:nearestPulse 2.5s ease-in-out infinite;
+    opacity:0.6; pointer-events:none;
+  }
+  @keyframes nearestPulse {
+    0%,100% { transform:scale(1); opacity:0.8; }
+    50% { transform:scale(1.3); opacity:0; }
+  }
+
+  .mk-poi.ping-pop::before {
+    content:''; position:absolute; inset:-4px;
+    border-radius:50%; background:currentColor;
+    animation:pingPopAnim 0.6s cubic-bezier(0.165, 0.84, 0.44, 1) forwards;
+    pointer-events:none; z-index:-1;
+  }
+  @keyframes pingPopAnim {
+    0% { transform:scale(0.8); opacity:0.9; }
+    100% { transform:scale(2.5); opacity:0; }
+  }
+
+  /* ── LOADING ── */
+  #loading {
+    position:fixed; inset:0; z-index:500;
+    background:var(--bg); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:20px;
+    transition:opacity 0.6s, visibility 0.6s;
+  }
+  #loading.hidden { opacity:0; visibility:hidden; }
+  .load-wordmark {
+    font-family:'Space Mono',monospace; font-weight:700; font-size:32px;
+    letter-spacing:0.25em; color:var(--accent);
+    text-shadow:0 0 40px rgba(94,234,212,0.6);
+    animation:loadGlow 1.5s ease-in-out infinite alternate;
+  }
+  @keyframes loadGlow {
+    from { text-shadow:0 0 20px rgba(94,234,212,0.4); }
+    to   { text-shadow:0 0 60px rgba(94,234,212,0.9), 0 0 100px rgba(94,234,212,0.3); }
+  }
+  .load-bar-wrap { width:200px; height:3px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden; }
+  .load-bar { height:100%; width:0%; background:var(--accent); border-radius:2px; transition:width 0.4s ease-out; }
+  .load-text { font-family:'Space Mono',monospace; font-size:12px; color:var(--muted); letter-spacing:0.1em; }
+
+  /* ── TOAST ── */
+  #toast {
+    position:fixed; bottom:200px; left:50%; z-index:400;
+    transform:translateX(-50%) translateY(10px);
+    background:rgba(10,14,22,0.95); color:var(--text);
+    padding:10px 22px; border-radius:24px;
+    font-size:14px; font-weight:600; letter-spacing:0.04em;
+    border:1px solid var(--border);
+    opacity:0; transition:all 0.3s; pointer-events:none; white-space:nowrap;
+    backdrop-filter:blur(16px); box-shadow:0 12px 40px rgba(0,0,0,0.6);
+  }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* ── DESKTOP SIDEBAR ── */
+  @media (min-width: 768px) {
+    #sheet {
+      top:64px; bottom:0; left:auto; right:0; width:340px; max-height:none;
+      border-radius:0; border-top:none; border-left:1px solid var(--border);
+      transform:translateX(0) !important;
+      transition:none; padding-top:0;
+    }
+    #sheet.expanded, #sheet.peek, #sheet.collapsed { transform:translateX(0)!important; }
+    .sheet-handle { display:none; }
+    #filter-bar { flex-wrap:wrap; padding:16px 16px 0; }
+    .cat-pill { padding:8px 14px; }
+    #nearby-list { padding-bottom:20px; }
+    #locate-btn { top:76px; }
+    #toast { bottom:60px; }
+  }
+
+  /* Center Dot */
+  #center-dot {
+    position:fixed; top:50%; left:50%; z-index:150;
+    width:14px; height:14px; border-radius:50%;
+    background:transparent; border:3px solid rgba(255,255,255,0.4);
+    transform:translate(-50%,-50%);
+    pointer-events:none; transition:border-color 0.2s;
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="center-dot"></div>
+
+<div id="loading">
+  <div class="load-wordmark">NEAR</div>
+  <div class="load-bar-wrap"><div class="load-bar" id="load-bar"></div></div>
+  <div class="load-text" id="load-text">Initializing…</div>
+</div>
+
+<header id="header">
+  <div id="header-inner">
+    <div class="wordmark">NEAR</div>
+    <div id="search-wrap">
+      <input id="search-input" type="text" placeholder="Search place or address…" autocomplete="off" inputmode="search"/>
+      <svg class="search-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <div id="ac-list"></div>
+    </div>
+  </div>
+</header>
+
+<button id="locate-btn" title="Use my location">
+  <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M12 2v2m0 16v2M2 12h2m16 0h2"/>
+    <circle cx="12" cy="12" r="8" stroke-opacity="0.3"/>
+  </svg>
+</button>
+
+<div id="sheet">
+  <div class="sheet-handle" id="sheet-handle"></div>
+
+  <div id="filter-bar"></div>
+
+  <div id="detail-area">
+    <div id="detail-badge">TAP A MARKER</div>
+    <div id="detail-name">NEAR you</div>
+    <div id="detail-addr">Showing nearest per category</div>
+  </div>
+
+  <div class="nearby-head">
+    <span>// NEARBY</span>
+    <span id="nearby-count" style="color:var(--accent);font-size:10px;"></span>
+  </div>
+  <div id="nearby-list">
+    <div style="padding:30px 20px;text-align:center;color:var(--muted);font-size:13px;font-family:'Space Mono',monospace;">Searching nearby…</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const TOKEN = 'pk.eyJ1IjoidGFsa2luZ3JpdmVycyIsImEiOiJjbW13MThuZXQycTdqMndwc3FyM3lzOWc3In0.Gg_QTjih_OS0BVk1oT7Kwg';
+mapboxgl.accessToken = TOKEN;
+
+// ── ICONS ──
+const ICONS = {
+  mall:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
+  hospital: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8m-4-4h8"/></svg>`,
+  school:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>`,
+  transit:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="14" rx="2"/><path d="M4 11h16M12 3v8M8 17l-2 4m10-4 2 4M7 17h10"/></svg>`,
+  food:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>`,
+  park:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V12M12 12C12 12 7 10 7 6a5 5 0 0 1 10 0c0 4-5 6-5 6z"/><path d="M5 22h14"/></svg>`,
+};
+
+const CATS = {
+  mall:     { label:'Mall',       color:'#f472b6', query:'shopping_mall',           emoji:'🛍' },
+  hospital: { label:'Hospital',   color:'#34d399', query:'hospital',                emoji:'🏥' },
+  school:   { label:'School',     color:'#fbbf24', query:'school',                  emoji:'🏫' },
+  transit:  { label:'Transport',  color:'#818cf8', query:'transit_station',         emoji:'🚉' },
+  food:     { label:'Food',       color:'#fb923c', query:'restaurant',              emoji:'🍜' },
+  park:     { label:'Park',       color:'#86efac', query:'park',                    emoji:'🌿' },
+};
+
+// ── STATE ──
+let map, popup;
+let userLoc = null, userMarker = null;
+let poiMarkers = {}, allPOI = [];
+let activeCats = new Set(Object.keys(CATS));
+let selectedPOI = null;
+let acTimer = null;
+let nearestPerCat = {};
+let isDragging = false;
+let sheetState = 'peek'; // peek | expanded | collapsed
+let touchStart = null, touchStartTime = null, sheetStartY = null;
+let routeFetchQueue = {};
+
+// ── MAP INIT ──
+function init() {
+  map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/mapbox/dark-v11',
+    center: [121.02, 14.59],
+    zoom: 13,
+    pitch: 0,
+    fadeDuration: 0,
+    antialias: true,
+    performanceMetricsCollection: false,
+  });
+
+  map.getCanvas().addEventListener('contextmenu', e => e.preventDefault());
+  map.dragRotate.disable();
+  map.touchZoomRotate.disableRotation();
+  map.addControl(new mapboxgl.NavigationControl({ showCompass:false }), 'top-left');
+
+  popup = new mapboxgl.Popup({ closeButton:false, offset:20, maxWidth:'260px', anchor:'bottom' });
+
+  // Tapping map updates Center
+  map.on('click', e => {
+    if (isDragging) return;
+    const features = map.queryRenderedFeatures(e.point);
+    if (!features.some(f => f.layer.id.includes('poi'))) {
+      setCenter({ lng: e.lngLat.lng, lat: e.lngLat.lat }, true);
+      popup.remove();
+    }
+  });
+
+  map.on('dragstart', () => { isDragging = true; popup.remove(); });
+  map.on('dragend',   () => { setTimeout(() => isDragging = false, 150); });
+
+  map.on('load', () => {
+    // Routes static sources
+    map.addSource('routes', { type:'geojson', data:emptyFC() });
+
+    // Inner & Outer static glows
+    map.addLayer({ id:'routes-glow-wide', type:'line', source:'routes',
+      layout:{ 'line-join':'round','line-cap':'round' },
+      paint:{ 'line-color':['get','color'], 'line-width':14, 'line-opacity':0.05, 'line-blur':8 }
+    });
+    map.addLayer({ id:'routes-glow', type:'line', source:'routes',
+      layout:{ 'line-join':'round','line-cap':'round' },
+      paint:{ 'line-color':['get','color'], 'line-width':6, 'line-opacity':0.15, 'line-blur':4 }
+    });
+    map.addLayer({ id:'routes-core', type:'line', source:'routes',
+      layout:{ 'line-join':'round','line-cap':'round' },
+      paint:{ 'line-color':['get','color'], 'line-width':2, 'line-opacity':0.7, 'line-dasharray':[4, 3] }
+    });
+
+    // Particle Routes (Modern Glowing Dots)
+    map.addSource('routes-dots', { type:'geojson', data:emptyFC() });
+    map.addLayer({
+      id: 'routes-dots-glow', type: 'circle', source: 'routes-dots',
+      paint: { 'circle-radius': 14, 'circle-color': ['get', 'color'], 'circle-opacity': 0.45, 'circle-blur': 1 }
+    });
+    map.addLayer({
+      id: 'routes-dots-core', type: 'circle', source: 'routes-dots',
+      paint: { 'circle-radius': 4, 'circle-color': '#ffffff', 'circle-opacity': 1, 'circle-stroke-width': 1.5, 'circle-stroke-color': ['get', 'color'] }
+    });
+
+    buildFilters();
+    setLoadProgress(40, 'Getting location…');
+    geolocate();
+  });
+}
+
+// ── ROUTES & PARTICLES ANIMATION ──
+let routeAnimation;
+function animateRoutes(lineFeatures) {
+  cancelAnimationFrame(routeAnimation);
+  let progress = 0;
+  let hasPinged = false;
+  
+  const lines = lineFeatures.map(f => {
+    const coords = f.geometry.coordinates;
+    let dists = [0];
+    let total = 0;
+    for(let i=1; i<coords.length; i++) {
+      const dx = coords[i][0] - coords[i-1][0];
+      const dy = coords[i][1] - coords[i-1][1];
+      const d = Math.sqrt(dx*dx + dy*dy);
+      total += d;
+      dists.push(total);
+    }
+    return { coords, dists, totalLength: total, color: f.properties.color, id: f.properties.id };
+  }).filter(l => l.totalLength > 0);
+
+  let lastTime = 0;
+  function updateFrame(time) {
+    if (!lastTime) lastTime = time;
+    const dt = time - lastTime;
+    lastTime = time;
+
+    if (!isDragging && lines.length > 0) {
+      if (progress <= 1.05) {
+        progress += (dt * 0.0008); // Faster path travel speed (once)
+        if (progress > 1) progress = 1;
+
+        if (progress >= 1 && !hasPinged) {
+          hasPinged = true;
+          lines.forEach(line => {
+            if (line.id && poiMarkers[line.id]) {
+               const el = poiMarkers[line.id].el;
+               el.classList.add('ping-pop');
+               setTimeout(() => el.classList.remove('ping-pop'), 600);
+            }
+          });
+        }
+
+        const dotFeatures = [];
+        const drawnLines = [];
+
+        lines.forEach(line => {
+          const targetDist = progress * line.totalLength;
+          let i = 0;
+          while(i < line.dists.length - 2 && line.dists[i+1] < targetDist) i++;
+          
+          const p1 = line.coords[i];
+          const p2 = line.coords[i+1];
+          if (!p1 || !p2) return;
+          
+          const segmentLen = line.dists[i+1] - line.dists[i];
+          const w = segmentLen === 0 ? 0 : (targetDist - line.dists[i]) / segmentLen;
+          const lng = p1[0] + (p2[0] - p1[0]) * w;
+          const lat = p1[1] + (p2[1] - p1[1]) * w;
+          
+          // Always push the dot so it remains permanently at the destination when finished
+          dotFeatures.push({
+            type: 'Feature',
+            properties: { color: line.color },
+            geometry: { type: 'Point', coordinates: [lng, lat] }
+          });
+
+          // Compute sliced coordinates for the drawn line
+          const drawnCoords = line.coords.slice(0, i + 1);
+          drawnCoords.push([lng, lat]);
+          
+          drawnLines.push({
+             type: 'Feature',
+             properties: { color: line.color, id: line.id },
+             geometry: { type: 'LineString', coordinates: drawnCoords }
+          });
+        });
+
+        const routeSrc = map.getSource('routes');
+        if (routeSrc) routeSrc.setData({ type:'FeatureCollection', features: drawnLines });
+
+        const dotSrc = map.getSource('routes-dots');
+        if (dotSrc) dotSrc.setData({ type:'FeatureCollection', features: dotFeatures });
+      }
+    }
+    
+    if (progress < 1) {
+      routeAnimation = requestAnimationFrame(updateFrame);
+    }
+  }
+  routeAnimation = requestAnimationFrame(updateFrame);
+}
+
+// ── GEOLOCATE ──
+function geolocate() {
+  if (!navigator.geolocation) { hideLoading(); toast('Geolocation unavailable'); return; }
+  const btn = document.getElementById('locate-btn');
+  btn.classList.add('pulsing');
+  navigator.geolocation.getCurrentPosition(
+    p => {
+      btn.classList.remove('pulsing');
+      setCenter({ lng: p.coords.longitude, lat: p.coords.latitude }, true);
+    },
+    () => {
+      btn.classList.remove('pulsing');
+      hideLoading();
+      toast('Location denied — tap map to set location');
+    },
+    { timeout:10000, enableHighAccuracy:true }
+  );
+}
+
+function setCenter(lngLat, fly) {
+  userLoc = lngLat;
+
+  if (userMarker) userMarker.remove();
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:relative;width:20px;height:20px;';
+  const ring = document.createElement('div');
+  ring.className = 'mk-user-ring';
+  const dot = document.createElement('div');
+  dot.className = 'mk-user';
+  wrap.appendChild(ring);
+  wrap.appendChild(dot);
+  userMarker = new mapboxgl.Marker({ element:wrap, anchor:'center' })
+    .setLngLat([lngLat.lng, lngLat.lat]).addTo(map);
+
+  if (fly) {
+    map.flyTo({
+      center: [lngLat.lng, lngLat.lat],
+      zoom: 14,
+      duration: 1200,
+      easing: t => t < 0.5 ? 2 * t * t : (-1 + (4 - 2 * t) * t),
+      essential: true
+    });
+  }
+
+  clearMarkers();
+  clearRoutes();
+  selectedPOI = null;
+  nearestPerCat = {};
+  resetDetail();
+  fetchAll(lngLat);
+}
+
+// ── FETCH ALL POI ──
+async function fetchAll(center) {
+  setLoadProgress(50, 'Searching nearby places…');
+  showLoading();
+  allPOI = [];
+  await Promise.all(Object.keys(CATS).map(k => fetchCat(k, center)));
+  findNearestPerCat();
+  hideLoading();
+  updateCounts();
+  drawInitialRoutes();
+  populateNearbyDefault();
+  toast(`Found ${allPOI.length} places nearby`);
+}
+
+async function fetchCat(catKey, center) {
+  const q = encodeURIComponent(CATS[catKey].query);
+  const url = `https://api.mapbox.com/search/searchbox/v1/category/${q}`
+    + `?access_token=${TOKEN}&proximity=${center.lng},${center.lat}&limit=12&language=en`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return;
+    const d = await r.json();
+    (d.features || []).forEach(f => {
+      const [lng, lat] = f.geometry.coordinates;
+      const poi = {
+        id: f.properties.mapbox_id || (catKey+'_'+Math.random().toString(36).slice(2)),
+        catKey,
+        name: f.properties.name || 'Unknown',
+        address: f.properties.full_address || f.properties.place_formatted || '',
+        lng, lat,
+        dist: haversine(center, { lng, lat }),
+      };
+      allPOI.push(poi);
+      addMarker(poi);
+    });
+    setLoadProgress(50 + Object.keys(CATS).indexOf(catKey) * 8, `Loading ${CATS[catKey].label}…`);
+  } catch(e) { console.warn(catKey, e); }
+}
+
+function findNearestPerCat() {
+  nearestPerCat = {};
+  Object.keys(CATS).forEach(k => {
+    const sorted = allPOI.filter(p => p.catKey === k).sort((a,b) => a.dist - b.dist);
+    if (sorted[0]) nearestPerCat[k] = sorted[0];
+  });
+  Object.values(nearestPerCat).forEach(poi => {
+    const m = poiMarkers[poi.id];
+    if (m) m.el.classList.add('nearest');
+  });
+}
+
+// ── REAL ROUTING via Mapbox Directions ──
+async function fetchRoute(from, to) {
+  const key = `${from.lng},${from.lat}-${to.lng},${to.lat}`;
+  if (routeFetchQueue[key]) return routeFetchQueue[key];
+  const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${from.lng},${from.lat};${to.lng},${to.lat}`
+    + `?geometries=geojson&overview=full&steps=false&access_token=${TOKEN}`;
+  const promise = fetch(url).then(r => r.json()).then(d => d.routes?.[0]?.geometry || null).catch(() => null);
+  routeFetchQueue[key] = promise;
+  return promise;
+}
+
+// REAL routes on first load instead of point A to B!
+async function drawInitialRoutes() {
+  if (!userLoc) return;
+  const nearest = Object.values(nearestPerCat);
+  const routeResults = await Promise.all(nearest.map(async p => {
+    const geo = await fetchRoute({lng:userLoc.lng,lat:userLoc.lat}, {lng:p.lng,lat:p.lat});
+    return { poi: p, geo };
+  }));
+
+  const features = routeResults.map(({poi, geo}) => {
+    let coords = geo ? [...geo.coordinates] : null;
+    if (coords && coords.length > 0) coords.push([poi.lng, poi.lat]); // bridge exactly to POI marker
+    else coords = [[userLoc.lng,userLoc.lat],[poi.lng,poi.lat]];
+    return {
+      type:'Feature',
+      properties:{ color: CATS[poi.catKey].color, width:2, id: poi.id },
+      geometry: { type:'LineString', coordinates:coords }
+    };
+  });
+  
+  animateRoutes(features.filter(f => f.geometry && f.geometry.type === 'LineString'));
+}
+
+async function drawRoutesToPOI(from) {
+  const visible = allPOI.filter(p => p.id !== from.id && activeCats.has(p.catKey));
+  if (!visible.length) { clearRoutes(); return; }
+
+  const nearby = [...visible].sort((a,b) => (a.d||a.dist) - (b.d||b.dist)).slice(0, 12);
+  const routeResults = await Promise.all(nearby.map(async p => {
+    const geo = await fetchRoute({lng:from.lng,lat:from.lat}, {lng:p.lng,lat:p.lat});
+    return { poi:p, geo };
+  }));
+
+  const realFeatures = routeResults.map(({poi,geo}) => {
+    let coords = geo ? [...geo.coordinates] : null;
+    if (coords && coords.length > 0) coords.push([poi.lng, poi.lat]); // bridge exactly to POI marker
+    else coords = [[from.lng,from.lat],[poi.lng,poi.lat]];
+    return {
+      type:'Feature',
+      properties:{ color: CATS[poi.catKey].color, id: poi.id },
+      geometry: { type:'LineString', coordinates:coords }
+    };
+  });
+  
+  const farPOI = visible.slice(12);
+  const farFeatures = farPOI.map(p => ({
+    type:'Feature',
+    properties:{ color: CATS[p.catKey].color, id: p.id },
+    geometry:{ type:'LineString', coordinates:[[from.lng,from.lat],[p.lng,p.lat]] }
+  }));
+
+  const finalFeatures = [...realFeatures,...farFeatures];
+  animateRoutes(finalFeatures.filter(f => f.geometry && f.geometry.type === 'LineString'));
+}
+
+// ── MARKERS ──
+function addMarker(poi) {
+  const cat = CATS[poi.catKey];
+  const el  = document.createElement('div');
+  el.className = 'mk-poi';
+  el.style.cssText = `background:${cat.color}18;border-color:${cat.color}66;color:${cat.color};box-shadow:0 0 16px ${cat.color}25;`;
+  el.innerHTML = ICONS[poi.catKey] || '';
+
+  let touched = false;
+  el.addEventListener('touchstart', () => touched=true, {passive:true});
+  el.addEventListener('touchend', e => { if(touched){touched=false;e.stopPropagation();select(poi);} }, {passive:false});
+  el.addEventListener('mouseenter', () => { if(!isDragging) showPopup(poi); });
+  el.addEventListener('mouseleave', () => { if(selectedPOI?.id!==poi.id) popup.remove(); });
+  el.addEventListener('click',      e => { e.stopPropagation(); select(poi); });
+
+  const marker = new mapboxgl.Marker({ element:el, anchor:'center' })
+    .setLngLat([poi.lng, poi.lat]).addTo(map);
+  poiMarkers[poi.id] = { marker, el };
+}
+
+function clearMarkers() {
+  Object.values(poiMarkers).forEach(m => m.marker.remove());
+  poiMarkers = {}; allPOI = [];
+}
+
+function refreshVis() {
+  Object.entries(poiMarkers).forEach(([id, {el}]) => {
+    const poi = allPOI.find(p=>p.id===id);
+    el.style.display = poi && activeCats.has(poi.catKey) ? 'flex':'none';
+  });
+  if (selectedPOI && !activeCats.has(selectedPOI.catKey)) {
+    clearRoutes(); resetDetail(); selectedPOI=null;
+    drawInitialRoutes();
+  }
+  updateCounts();
+}
+
+// ── SELECT ──
+function select(poi) {
+  if (selectedPOI) poiMarkers[selectedPOI.id]?.el.classList.remove('selected');
+  selectedPOI = poi;
+  poiMarkers[poi.id]?.el.classList.add('selected');
+  popup.remove();
+  map.flyTo({ center:[poi.lng,poi.lat], zoom:15, duration:1000,
+              easing:t=>t<0.5?2*t*t:(-1+(4-2*t)*t), essential:true });
+  updateDetail(poi);
+  drawRoutesToPOI(poi);
+  populateNearby(poi);
+  expandSheet();
+}
+
+// ── POPUP ──
+function showPopup(poi) {
+  const cat = CATS[poi.catKey];
+  const sk  = safeKey(poi.id);
+  window['_p'+sk] = poi;
+  popup.setLngLat([poi.lng, poi.lat]).setHTML(`
+    <div class="pu-name">${esc(poi.name)}</div>
+    <div class="pu-cat" style="color:${cat.color}">${cat.emoji} ${cat.label.toUpperCase()}</div>
+    <div class="pu-addr">${esc(poi.address)||'—'}</div>
+    <div class="pu-row">
+      <button class="pu-btn" onclick="select(window['_p${sk}'])">Focus & Route</button>
+      <button class="pu-btn-sec" onclick="setCenter({lng:${poi.lng},lat:${poi.lat}},true)">Center Here</button>
+    </div>
+  `).addTo(map);
+}
+
+// ── ROUTES ──
+function clearRoutes() {
+  map.getSource('routes')?.setData(emptyFC());
+  map.getSource('routes-dots')?.setData(emptyFC());
+  cancelAnimationFrame(routeAnimation);
+}
+
+// ── DETAIL PANEL ──
+function updateDetail(poi) {
+  const cat = CATS[poi.catKey];
+  const badge = document.getElementById('detail-badge');
+  badge.innerHTML = `<span style="color:${cat.color}">${cat.emoji}</span>&nbsp;${cat.label.toUpperCase()}`;
+  badge.style.color = cat.color;
+  badge.style.background = `${cat.color}18`;
+  document.getElementById('detail-name').textContent = poi.name;
+  document.getElementById('detail-addr').textContent = poi.address || 'No address available';
+}
+
+function resetDetail() {
+  const badge = document.getElementById('detail-badge');
+  badge.innerHTML = 'TAP A MARKER';
+  badge.style.cssText = '';
+  document.getElementById('detail-name').textContent = 'NEAR you';
+  document.getElementById('detail-addr').textContent = 'Showing nearest per category';
+}
+
+function populateNearby(from) {
+  const items = allPOI
+    .filter(p => p.id!==from.id && activeCats.has(p.catKey))
+    .map(p => ({...p, d: haversine({lng:from.lng,lat:from.lat},{lng:p.lng,lat:p.lat})}))
+    .sort((a,b) => a.d - b.d)
+    .slice(0, 40);
+  renderNearbyList(items, from.id);
+}
+
+function populateNearbyDefault() {
+  const items = allPOI
+    .filter(p => activeCats.has(p.catKey))
+    .sort((a,b) => a.dist - b.dist)
+    .slice(0, 40);
+  document.getElementById('nearby-count').textContent = `${items.length} places`;
+  renderNearbyList(items, null);
+}
+
+function renderNearbyList(items, fromId) {
+  const list = document.getElementById('nearby-list');
+  document.getElementById('nearby-count').textContent = `${items.length} places`;
+  if (!items.length) {
+    list.innerHTML = `<div style="padding:40px 20px;text-align:center;color:var(--muted);font-size:13px;font-family:'Space Mono',monospace;">Nothing found</div>`;
+    return;
+  }
+  list.innerHTML = items.map(p => {
+    const cat = CATS[p.catKey];
+    const sk  = safeKey(p.id);
+    const isNearest = nearestPerCat[p.catKey]?.id === p.id;
+    window['_p'+sk] = p;
+    return `<div class="nearby-item" onclick="select(window['_p${sk}'])">
+      <div class="ni-pip" style="background:${cat.color};box-shadow:0 0 8px ${cat.color}80;"></div>
+      <div class="ni-info">
+        <div class="ni-name">${esc(p.name)}</div>
+        <div class="ni-sub" style="display:flex;align-items:center;gap:6px;">
+          <span>${cat.emoji} ${cat.label}</span>
+          ${isNearest ? `<span class="ni-nearest-badge">NEAREST</span>` : ''}
+        </div>
+      </div>
+      <div class="ni-dist">${fmt(p.d ?? p.dist)}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── FILTERS ──
+function buildFilters() {
+  document.getElementById('filter-bar').innerHTML = Object.entries(CATS).map(([k,c]) => `
+    <button class="cat-pill active" data-cat="${k}" onclick="toggleCat('${k}')">
+      <div class="pill-dot" style="background:${c.color};box-shadow:0 0 8px ${c.color}80;"></div>
+      ${c.emoji} ${c.label}
+      <span class="pill-cnt" id="cnt-${k}">0</span>
+    </button>`).join('');
+}
+
+function toggleCat(k) {
+  activeCats.has(k) ? activeCats.delete(k) : activeCats.add(k);
+  const btn = document.querySelector(`[data-cat="${k}"]`);
+  btn.classList.toggle('active', activeCats.has(k));
+  btn.classList.toggle('off', !activeCats.has(k));
+  refreshVis();
+  if (selectedPOI) { drawRoutesToPOI(selectedPOI); populateNearby(selectedPOI); }
+  else { drawInitialRoutes(); populateNearbyDefault(); }
+}
+
+function updateCounts() {
+  Object.keys(CATS).forEach(k => {
+    const el = document.getElementById('cnt-'+k);
+    if (el) el.textContent = allPOI.filter(p=>p.catKey===k).length;
+  });
+}
+
+// ── SHEET GESTURES ──
+const sheet = document.getElementById('sheet');
+const handle = document.getElementById('sheet-handle');
+
+function expandSheet()  { sheetState='expanded'; sheet.className=''; sheet.classList.add('expanded'); }
+function peekSheet()    { sheetState='peek';     sheet.className=''; sheet.classList.add('peek'); }
+function collapseSheet(){ sheetState='collapsed';sheet.className=''; sheet.classList.add('collapsed'); }
+
+handle.addEventListener('click', () => {
+  if (sheetState==='peek') expandSheet();
+  else if (sheetState==='expanded') peekSheet();
+  else peekSheet();
+});
+
+handle.addEventListener('touchstart', e => {
+  touchStart = e.touches[0].clientY;
+  touchStartTime = Date.now();
+  sheetStartY = sheet.getBoundingClientRect().top;
+}, {passive:true});
+
+document.addEventListener('touchmove', e => {
+  if (touchStart === null) return;
+  const dy = e.touches[0].clientY - touchStart;
+  if (Math.abs(dy) > 10) {
+    sheet.style.transition = 'none';
+    const newTop = Math.max(window.innerHeight*0.15, sheetStartY + dy);
+    sheet.style.transform = `translateY(${newTop - sheetStartY > 0 ? newTop - sheetStartY : 0}px)`;
+  }
+}, {passive:true});
+
+document.addEventListener('touchend', e => {
+  if (touchStart === null) return;
+  sheet.style.transition = '';
+  sheet.style.transform = '';
+  const dy = e.changedTouches[0].clientY - touchStart;
+  const timeDiff = Date.now() - touchStartTime;
+  const velocity = Math.abs(dy) / (timeDiff || 1);
+
+  if (dy < -50 || (dy < 0 && velocity > 0.8)) expandSheet();
+  else if (dy > 50 || (dy > 0 && velocity > 0.8)) {
+    if (sheetState==='expanded') peekSheet();
+    else collapseSheet();
+  } else {
+    // Snap back
+    if (sheetState==='expanded') expandSheet();
+    else if (sheetState==='peek') peekSheet();
+    else collapseSheet();
+  }
+  touchStart = null;
+}, {passive:true});
+
+peekSheet();
+
+// ── SEARCH AUTOCOMPLETE ──
+document.getElementById('search-input').addEventListener('input', function() {
+  const q = this.value.trim();
+  clearTimeout(acTimer);
+  if (q.length < 3) { hideAC(); return; }
+  acTimer = setTimeout(() => autocomplete(q), 280);
+});
+document.getElementById('search-input').addEventListener('keydown', e => { if(e.key==='Escape') hideAC(); });
+document.addEventListener('click', e => { if(!e.target.closest('#search-wrap')) hideAC(); });
+
+async function autocomplete(q) {
+  const prox = userLoc ? `&proximity=${userLoc.lng},${userLoc.lat}` : '';
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`
+    + `?access_token=${TOKEN}&autocomplete=true&limit=6&language=en${prox}`;
+  try {
+    const d = await (await fetch(url)).json();
+    if (!d.features?.length) { hideAC(); return; }
+    renderAC(d.features);
+  } catch { hideAC(); }
+}
+
+function renderAC(fs) {
+  const box = document.getElementById('ac-list');
+  box.innerHTML = fs.map((f,i) => `
+    <div class="ac-item" data-i="${i}">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+        <path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/>
+        <circle cx="12" cy="10" r="3"/>
+      </svg>
+      <div>
+        <div class="ac-name">${esc(f.text)}</div>
+        <div class="ac-place">${esc(f.place_name)}</div>
+      </div>
+    </div>`).join('');
+  box.querySelectorAll('.ac-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const f = fs[+el.dataset.i];
+      document.getElementById('search-input').value = f.place_name;
+      hideAC();
+      setCenter({ lng:f.center[0], lat:f.center[1] }, true);
+    });
+  });
+  box.style.display = 'block';
+}
+function hideAC() { document.getElementById('ac-list').style.display='none'; }
+
+// ── LOCATE BUTTON ──
+document.getElementById('locate-btn').addEventListener('click', () => {
+  const btn = document.getElementById('locate-btn');
+  btn.disabled = true;
+  btn.classList.add('pulsing');
+  geolocate();
+  setTimeout(() => { btn.disabled=false; btn.classList.remove('pulsing'); }, 5000);
+});
+
+// ── UTILS ──
+function haversine(a,b) {
+  const R=6371000,r=x=>x*Math.PI/180;
+  const dLat=r(b.lat-a.lat),dLng=r(b.lng-a.lng);
+  return 2*R*Math.asin(Math.sqrt(Math.sin(dLat/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2));
+}
+function fmt(m) { return m>=1000?(m/1000).toFixed(1)+' km':Math.round(m)+' m'; }
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function safeKey(id) { return id.replace(/[^a-z0-9]/gi,'_'); }
+function emptyFC() { return {type:'FeatureCollection',features:[]}; }
+
+function toast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+function showLoading() { document.getElementById('loading').classList.remove('hidden'); }
+function hideLoading() { document.getElementById('loading').classList.add('hidden'); }
+function setLoadProgress(pct, txt) {
+  document.getElementById('load-bar').style.width = pct+'%';
+  if (txt) document.getElementById('load-text').textContent = txt;
+}
+
+init();
+setLoadProgress(20, 'Loading map…');
+</script>
+</body>
+</html>
