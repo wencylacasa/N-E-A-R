@@ -221,12 +221,14 @@
     border:2px solid rgba(255,255,255,0.15);
     display:flex; align-items:center; justify-content:center;
     cursor:pointer; position:relative;
-    transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s;
-    will-change:transform;
+    transition:scale 0.3s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s, opacity 0.3s, border-color 0.2s;
+    will-change:transform, scale;
+    scale: 1;
   }
+  .mk-poi.distant { scale: 0.65; opacity: 0.75; z-index: 1; border-color:transparent; }
   .mk-poi > svg { width: 16px; height: 16px; }
-  .mk-poi:hover { transform:scale(1.2); z-index:5; }
-  .mk-poi.selected { transform:scale(1.35); border-color:rgba(255,255,255,0.6); z-index:20; }
+  .mk-poi:hover { scale: 1.2; z-index:5; opacity: 1; }
+  .mk-poi.selected { scale: 1.35; border-color:rgba(255,255,255,0.6); z-index:20; opacity: 1; }
   .mk-poi.nearest::after {
     content:''; position:absolute; inset:-5px;
     border-radius:50%; border:2px solid currentColor;
@@ -380,12 +382,12 @@ const ICONS = {
 };
 
 const CATS = {
-  mall:     { label:'Mall',       color:'#f472b6', query:'shopping_mall',           emoji:'🛍' },
-  hospital: { label:'Hospital',   color:'#34d399', query:'hospital',                emoji:'🏥' },
-  school:   { label:'School',     color:'#fbbf24', query:'school',                  emoji:'🏫' },
-  transit:  { label:'Transport',  color:'#818cf8', query:'transit_station',         emoji:'🚉' },
-  food:     { label:'Food',       color:'#fb923c', query:'restaurant',              emoji:'🍜' },
-  park:     { label:'Park',       color:'#86efac', query:'park',                    emoji:'🌿' },
+  mall:     { label:'Mall',       color:'#f472b6', query:'shopping_mall',           icon: ICONS.mall },
+  hospital: { label:'Hospital',   color:'#34d399', query:'hospital',                icon: ICONS.hospital },
+  school:   { label:'School',     color:'#fbbf24', query:'school',                  icon: ICONS.school },
+  transit:  { label:'Transport',  color:'#818cf8', query:'transit_station',         icon: ICONS.transit },
+  food:     { label:'Food',       color:'#fb923c', query:'restaurant',              icon: ICONS.food },
+  park:     { label:'Park',       color:'#86efac', query:'park',                    icon: ICONS.park },
 };
 
 // ── STATE ──
@@ -441,15 +443,15 @@ function init() {
     // Inner & Outer static glows
     map.addLayer({ id:'routes-glow-wide', type:'line', source:'routes',
       layout:{ 'line-join':'round','line-cap':'round' },
-      paint:{ 'line-color':['get','color'], 'line-width':14, 'line-opacity':0.05, 'line-blur':8 }
+      paint:{ 'line-color':['get','color'], 'line-width':14, 'line-opacity':0.08, 'line-blur':8 }
     });
     map.addLayer({ id:'routes-glow', type:'line', source:'routes',
       layout:{ 'line-join':'round','line-cap':'round' },
-      paint:{ 'line-color':['get','color'], 'line-width':6, 'line-opacity':0.15, 'line-blur':4 }
+      paint:{ 'line-color':['get','color'], 'line-width':6, 'line-opacity':0.25, 'line-blur':4 }
     });
     map.addLayer({ id:'routes-core', type:'line', source:'routes',
       layout:{ 'line-join':'round','line-cap':'round' },
-      paint:{ 'line-color':['get','color'], 'line-width':2, 'line-opacity':0.7, 'line-dasharray':[4, 3] }
+      paint:{ 'line-color':['get','color'], 'line-width':3, 'line-opacity':0.9 }
     });
 
     // Particle Routes (Modern Glowing Dots)
@@ -490,18 +492,20 @@ function animateRoutes(lineFeatures) {
     return { coords, dists, totalLength: total, color: f.properties.color, id: f.properties.id };
   }).filter(l => l.totalLength > 0);
 
-  let lastTime = 0;
+  let startTime = null;
+  const animDuration = 1800; // 1.8 seconds duration
+  
   function updateFrame(time) {
-    if (!lastTime) lastTime = time;
-    const dt = time - lastTime;
-    lastTime = time;
+    if (!startTime) startTime = time;
+    const elapsed = time - startTime;
 
     if (!isDragging && lines.length > 0) {
-      if (progress <= 1.05) {
-        progress += (dt * 0.0008); // Faster path travel speed (once)
-        if (progress > 1) progress = 1;
+      if (progress <= 1) {
+        // Calculate speed ramp (easeInOutCubic)
+        let t = Math.min(elapsed / animDuration, 1);
+        progress = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
-        if (progress >= 1 && !hasPinged) {
+        if (progress >= 0.99 && !hasPinged) {
           hasPinged = true;
           lines.forEach(line => {
             if (line.id && poiMarkers[line.id]) {
@@ -597,9 +601,11 @@ function setCenter(lngLat, fly) {
     .setLngLat([lngLat.lng, lngLat.lat]).addTo(map);
 
   if (fly) {
+    const isDesktop = window.innerWidth >= 768;
     map.flyTo({
       center: [lngLat.lng, lngLat.lat],
       zoom: 14,
+      padding: { bottom: isDesktop ? 0 : 250, right: isDesktop ? 340 : 0 },
       duration: 1200,
       easing: t => t < 0.5 ? 2 * t * t : (-1 + (4 - 2 * t) * t),
       essential: true
@@ -615,6 +621,30 @@ function setCenter(lngLat, fly) {
 }
 
 // ── FETCH ALL POI ──
+function fitMapToBounds() {
+  if (!userLoc) return;
+  const bounds = new mapboxgl.LngLatBounds();
+  bounds.extend([userLoc.lng, userLoc.lat]);
+  let added = false;
+  Object.entries(poiMarkers).forEach(([id, {el, wrap}]) => {
+    if (wrap && wrap.style.display !== 'none' && !el.classList.contains('distant')) {
+      const poi = allPOI.find(p => p.id === id);
+      if (poi) { bounds.extend([poi.lng, poi.lat]); added = true; }
+    }
+  });
+
+  if (added) {
+    const isDesktop = window.innerWidth >= 768;
+    map.fitBounds(bounds, {
+      padding: { top: 140, bottom: isDesktop ? 60 : 300, left: 60, right: isDesktop ? 380 : 60 },
+      maxZoom: 15.5,
+      duration: 1600,
+      pitch: 0,
+      essential: true
+    });
+  }
+}
+
 async function fetchAll(center) {
   setLoadProgress(50, 'Searching nearby places…');
   showLoading();
@@ -625,13 +655,15 @@ async function fetchAll(center) {
   updateCounts();
   drawInitialRoutes();
   populateNearbyDefault();
+  refreshVis();
+  fitMapToBounds();
   toast(`Found ${allPOI.length} places nearby`);
 }
 
 async function fetchCat(catKey, center) {
   const q = encodeURIComponent(CATS[catKey].query);
   const url = `https://api.mapbox.com/search/searchbox/v1/category/${q}`
-    + `?access_token=${TOKEN}&proximity=${center.lng},${center.lat}&limit=12&language=en`;
+    + `?access_token=${TOKEN}&proximity=${center.lng},${center.lat}&limit=24&language=en`;
   try {
     const r = await fetch(url);
     if (!r.ok) return;
@@ -639,7 +671,7 @@ async function fetchCat(catKey, center) {
     (d.features || []).forEach(f => {
       const [lng, lat] = f.geometry.coordinates;
       const poi = {
-        id: f.properties.mapbox_id || (catKey+'_'+Math.random().toString(36).slice(2)),
+        id: catKey + '_' + (f.properties.mapbox_id || Math.random().toString(36).slice(2)),
         catKey,
         name: f.properties.name || 'Unknown',
         address: f.properties.full_address || f.properties.place_formatted || '',
@@ -734,21 +766,26 @@ async function drawRoutesToPOI(from) {
 // ── MARKERS ──
 function addMarker(poi) {
   const cat = CATS[poi.catKey];
+  
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:relative;width:36px;height:36px;';
+
   const el  = document.createElement('div');
   el.className = 'mk-poi';
   el.style.cssText = `background:${cat.color}18;border-color:${cat.color}66;color:${cat.color};box-shadow:0 0 16px ${cat.color}25;`;
   el.innerHTML = ICONS[poi.catKey] || '';
+  wrap.appendChild(el);
 
   let touched = false;
   el.addEventListener('touchstart', () => touched=true, {passive:true});
-  el.addEventListener('touchend', e => { if(touched){touched=false;e.stopPropagation();select(poi);} }, {passive:false});
+  el.addEventListener('touchend', e => { if(touched){touched=false;e.stopPropagation();showPopup(poi);} }, {passive:false});
   el.addEventListener('mouseenter', () => { if(!isDragging) showPopup(poi); });
   el.addEventListener('mouseleave', () => { if(selectedPOI?.id!==poi.id) popup.remove(); });
-  el.addEventListener('click',      e => { e.stopPropagation(); select(poi); });
+  el.addEventListener('click',      e => { e.stopPropagation(); showPopup(poi); });
 
-  const marker = new mapboxgl.Marker({ element:el, anchor:'center' })
+  const marker = new mapboxgl.Marker({ element:wrap, anchor:'center' })
     .setLngLat([poi.lng, poi.lat]).addTo(map);
-  poiMarkers[poi.id] = { marker, el };
+  poiMarkers[poi.id] = { marker, el, wrap };
 }
 
 function clearMarkers() {
@@ -757,10 +794,27 @@ function clearMarkers() {
 }
 
 function refreshVis() {
-  Object.entries(poiMarkers).forEach(([id, {el}]) => {
+  let visiblePOI = [];
+  Object.entries(poiMarkers).forEach(([id, {el, wrap}]) => {
     const poi = allPOI.find(p=>p.id===id);
-    el.style.display = poi && activeCats.has(poi.catKey) ? 'flex':'none';
+    if (poi && activeCats.has(poi.catKey)) {
+      if(wrap) wrap.style.display = 'block';
+      visiblePOI.push(poi);
+    } else {
+      if(wrap) wrap.style.display = 'none';
+      el.classList.remove('distant');
+    }
   });
+
+  visiblePOI.sort((a,b) => a.dist - b.dist);
+  visiblePOI.forEach((poi, i) => {
+    const m = poiMarkers[poi.id];
+    if (m) {
+      if (i >= 12) m.el.classList.add('distant');
+      else m.el.classList.remove('distant');
+    }
+  });
+
   if (selectedPOI && !activeCats.has(selectedPOI.catKey)) {
     clearRoutes(); resetDetail(); selectedPOI=null;
     drawInitialRoutes();
@@ -774,7 +828,8 @@ function select(poi) {
   selectedPOI = poi;
   poiMarkers[poi.id]?.el.classList.add('selected');
   popup.remove();
-  map.flyTo({ center:[poi.lng,poi.lat], zoom:15, duration:1000,
+  const isDesktop = window.innerWidth >= 768;
+  map.flyTo({ center:[poi.lng,poi.lat], zoom:15, padding: { bottom: isDesktop ? 0 : 380, right: isDesktop ? 360 : 0 }, duration:1000,
               easing:t=>t<0.5?2*t*t:(-1+(4-2*t)*t), essential:true });
   updateDetail(poi);
   drawRoutesToPOI(poi);
@@ -789,7 +844,9 @@ function showPopup(poi) {
   window['_p'+sk] = poi;
   popup.setLngLat([poi.lng, poi.lat]).setHTML(`
     <div class="pu-name">${esc(poi.name)}</div>
-    <div class="pu-cat" style="color:${cat.color}">${cat.emoji} ${cat.label.toUpperCase()}</div>
+    <div class="pu-cat" style="color:${cat.color}; display:flex; align-items:center; gap:6px;">
+      <span style="width:14px;height:14px;display:flex;">${cat.icon}</span> ${cat.label.toUpperCase()}
+    </div>
     <div class="pu-addr">${esc(poi.address)||'—'}</div>
     <div class="pu-row">
       <button class="pu-btn" onclick="select(window['_p${sk}'])">Focus & Route</button>
@@ -809,7 +866,7 @@ function clearRoutes() {
 function updateDetail(poi) {
   const cat = CATS[poi.catKey];
   const badge = document.getElementById('detail-badge');
-  badge.innerHTML = `<span style="color:${cat.color}">${cat.emoji}</span>&nbsp;${cat.label.toUpperCase()}`;
+  badge.innerHTML = `<span style="color:${cat.color};display:flex;width:14px;height:14px;">${cat.icon}</span>&nbsp;${cat.label.toUpperCase()}`;
   badge.style.color = cat.color;
   badge.style.background = `${cat.color}18`;
   document.getElementById('detail-name').textContent = poi.name;
@@ -859,7 +916,8 @@ function renderNearbyList(items, fromId) {
       <div class="ni-info">
         <div class="ni-name">${esc(p.name)}</div>
         <div class="ni-sub" style="display:flex;align-items:center;gap:6px;">
-          <span>${cat.emoji} ${cat.label}</span>
+          <span style="color:${cat.color};width:14px;height:14px;display:flex;">${cat.icon}</span>
+          <span>${cat.label}</span>
           ${isNearest ? `<span class="ni-nearest-badge">NEAREST</span>` : ''}
         </div>
       </div>
@@ -873,7 +931,8 @@ function buildFilters() {
   document.getElementById('filter-bar').innerHTML = Object.entries(CATS).map(([k,c]) => `
     <button class="cat-pill active" data-cat="${k}" onclick="toggleCat('${k}')">
       <div class="pill-dot" style="background:${c.color};box-shadow:0 0 8px ${c.color}80;"></div>
-      ${c.emoji} ${c.label}
+      <span style="width:16px;height:16px;display:flex;align-items:center;justify-content:center;">${c.icon}</span>
+      ${c.label}
       <span class="pill-cnt" id="cnt-${k}">0</span>
     </button>`).join('');
 }
@@ -885,7 +944,7 @@ function toggleCat(k) {
   btn.classList.toggle('off', !activeCats.has(k));
   refreshVis();
   if (selectedPOI) { drawRoutesToPOI(selectedPOI); populateNearby(selectedPOI); }
-  else { drawInitialRoutes(); populateNearbyDefault(); }
+  else { drawInitialRoutes(); populateNearbyDefault(); fitMapToBounds(); }
 }
 
 function updateCounts() {
@@ -909,11 +968,16 @@ handle.addEventListener('click', () => {
   else peekSheet();
 });
 
-handle.addEventListener('touchstart', e => {
+function initDrag(e) {
   touchStart = e.touches[0].clientY;
   touchStartTime = Date.now();
   sheetStartY = sheet.getBoundingClientRect().top;
-}, {passive:true});
+}
+
+handle.addEventListener('touchstart', initDrag, {passive:true});
+document.getElementById('filter-bar').addEventListener('touchstart', initDrag, {passive:true});
+document.getElementById('detail-area').addEventListener('touchstart', initDrag, {passive:true});
+document.querySelector('.nearby-head').addEventListener('touchstart', initDrag, {passive:true});
 
 document.addEventListener('touchmove', e => {
   if (touchStart === null) return;
