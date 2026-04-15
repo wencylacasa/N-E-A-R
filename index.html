@@ -6,7 +6,6 @@
 <title>NEAR — Live POI Explorer</title>
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet"/>
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
-<script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 <style>
   :root {
@@ -103,7 +102,7 @@
     margin:12px auto 0; flex-shrink:0; cursor:grab;
   }
 
-  /* Filter pills / Modern Nav Bar */
+  /* Filter pills */
   #filter-bar {
     padding:16px 20px 0; flex-shrink:0;
     display:flex; align-items:center; gap:12px; overflow-x:auto;
@@ -120,6 +119,8 @@
     box-shadow:0 4px 16px rgba(0,0,0,0.15);
   }
   .cat-pill .pill-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .cat-pill .pill-icon { width:16px; height:16px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .cat-pill .pill-icon svg { width:16px; height:16px; }
   .cat-pill .pill-cnt { font-family:'Space Mono',monospace; font-size:11px; opacity:0.6; transition:opacity 0.2s; }
   
   .cat-pill.active { 
@@ -160,7 +161,9 @@
   .ni-pip { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
   .ni-info { flex:1; min-width:0; }
   .ni-name { font-size:17px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .ni-sub  { font-size:12px; font-family:'Space Mono',monospace; color:var(--muted); margin-top:4px; }
+  .ni-sub  { font-size:12px; font-family:'Space Mono',monospace; color:var(--muted); margin-top:4px; display:flex; align-items:center; gap:6px; }
+  .ni-sub-icon { width:14px; height:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .ni-sub-icon svg { width:14px; height:14px; }
   .ni-dist { font-size:14px; font-family:'Space Mono',monospace; color:var(--accent); white-space:nowrap; flex-shrink:0; font-weight:700; }
   .ni-nearest-badge {
     font-size:9px; font-family:'Space Mono',monospace; letter-spacing:0.1em;
@@ -168,35 +171,62 @@
     color:var(--accent); white-space:nowrap;
   }
 
+  /* ── MOBILE POI MODAL ── */
+  #poi-modal {
+    position:fixed; bottom:0; left:0; right:0; z-index:400;
+    background:rgba(10,14,22,0.97); border-top:1px solid rgba(255,255,255,0.12);
+    border-radius:28px 28px 0 0; backdrop-filter:blur(40px) saturate(200%);
+    transform:translateY(100%);
+    transition:transform 0.42s cubic-bezier(0.25,1,0.5,1);
+    padding:0 0 env(safe-area-inset-bottom,0);
+    box-shadow:0 -30px 80px rgba(0,0,0,0.7);
+  }
+  #poi-modal.open { transform:translateY(0); }
+  .modal-handle { width:48px; height:5px; background:rgba(255,255,255,0.18); border-radius:3px; margin:14px auto 0; }
+  .modal-inner { padding:20px 20px 28px; }
+  .modal-cat-row {
+    display:flex; align-items:center; gap:8px; margin-bottom:10px;
+    font-family:'Space Mono',monospace; font-size:11px; font-weight:700; letter-spacing:0.1em;
+  }
+  .modal-cat-icon { width:18px; height:18px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .modal-cat-icon svg { width:18px; height:18px; }
+  .modal-name { font-size:22px; font-weight:700; line-height:1.2; margin-bottom:6px; }
+  .modal-addr { font-size:13px; color:var(--muted); font-family:'Space Mono',monospace; line-height:1.5; margin-bottom:20px; }
+  .modal-meta { display:flex; gap:10px; margin-bottom:20px; }
+  .modal-meta-chip {
+    display:flex; align-items:center; gap:6px; padding:8px 14px;
+    background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);
+    border-radius:12px; font-size:13px; font-weight:600;
+    font-family:'Space Mono',monospace;
+  }
+  .modal-actions { display:flex; gap:12px; }
+  .modal-btn-primary {
+    flex:1; padding:16px; background:var(--accent); border:none; border-radius:16px;
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;
+    color:#000; cursor:pointer; letter-spacing:0.03em;
+    transition:transform 0.1s, opacity 0.15s; -webkit-tap-highlight-color:transparent;
+  }
+  .modal-btn-primary:active { transform:scale(0.96); opacity:0.85; }
+  .modal-btn-sec {
+    padding:16px 20px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1);
+    border-radius:16px; font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:15px;
+    color:var(--text); cursor:pointer; transition:transform 0.1s; -webkit-tap-highlight-color:transparent;
+  }
+  .modal-btn-sec:active { transform:scale(0.96); }
+
+  /* Dismiss overlay */
+  #modal-overlay {
+    position:fixed; inset:0; z-index:390;
+    background:rgba(0,0,0,0.4); opacity:0;
+    pointer-events:none; transition:opacity 0.3s;
+  }
+  #modal-overlay.active { opacity:1; pointer-events:all; }
+
   /* ── MAPBOX overrides ── */
   .mapboxgl-ctrl-group { background:var(--surface)!important; border:1px solid var(--border)!important; border-radius:12px!important; backdrop-filter:blur(20px)!important; }
   .mapboxgl-ctrl-icon { filter:invert(0.8) brightness(0.6); }
   .mapboxgl-ctrl-top-left { top:134px!important; left:16px!important; }
   .mapboxgl-ctrl-attrib, .mapboxgl-ctrl-logo { display:none!important; }
-  .mapboxgl-popup-content {
-    background:rgba(10,14,22,0.98)!important; border:1px solid var(--border)!important;
-    border-radius:16px!important; padding:16px!important;
-    color:var(--text)!important; font-family:'Space Grotesk',sans-serif!important;
-    box-shadow:0 20px 50px rgba(0,0,0,0.8)!important; min-width:200px;
-    backdrop-filter:blur(20px)!important;
-  }
-  .mapboxgl-popup-tip { display:none!important; }
-  .pu-name { font-size:17px; font-weight:700; margin-bottom:4px; }
-  .pu-cat  { font-size:12px; font-family:'Space Mono',monospace; letter-spacing:0.08em; margin-bottom:6px; font-weight:700; }
-  .pu-addr { font-size:13px; color:var(--muted); margin-bottom:14px; line-height:1.4; }
-  .pu-row  { display:flex; gap:10px; }
-  .pu-btn  {
-    flex:1; padding:12px; background:var(--accent);
-    border:none; border-radius:12px; font-family:'Space Grotesk',sans-serif;
-    font-weight:700; font-size:14px; color:#000; cursor:pointer;
-    letter-spacing:0.04em; transition:transform 0.1s;
-  }
-  .pu-btn:active { transform:scale(0.96); }
-  .pu-btn-sec {
-    padding:12px; background:var(--surface2); border:1px solid var(--border);
-    border-radius:12px; font-family:'Space Grotesk',sans-serif;
-    font-weight:600; font-size:14px; color:var(--text); cursor:pointer;
-  }
 
   /* ── MARKERS ── */
   .mk-user {
@@ -216,18 +246,27 @@
     100% { transform:translate(-50%,-50%) scale(2); opacity:0; }
   }
 
+  /* FIX: Explicit marker sizing so icons always render */
   .mk-poi {
-    width:36px; height:36px; border-radius:50%;
+    width:40px; height:40px; border-radius:50%;
     display:flex; align-items:center; justify-content:center;
     cursor:pointer; position:relative;
-    transition:scale 0.4s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s, opacity 0.4s;
-    will-change:transform, scale;
-    scale: 1;
+    transition:transform 0.35s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s, opacity 0.4s;
+    will-change:transform;
+    transform: scale(1);
+    flex-shrink:0;
   }
-  .mk-poi.distant { scale: 0.6; opacity: 0.85; z-index: 1; }
-  .mk-poi > svg { width: 18px; height: 18px; }
-  .mk-poi:hover { scale: 1.15; z-index:5; opacity: 1; box-shadow:0 8px 24px rgba(0,0,0,0.4); }
-  .mk-poi.selected { scale: 1.3; z-index:20; opacity: 1; box-shadow:0 12px 30px rgba(0,0,0,0.5); }
+  /* FIX: SVG inside marker — always 18x18 px, never inherits parent size */
+  .mk-poi svg {
+    width:18px !important;
+    height:18px !important;
+    display:block;
+    pointer-events:none;
+    flex-shrink:0;
+  }
+  .mk-poi.distant { transform:scale(0.62); opacity:0.8; z-index:1; }
+  .mk-poi:hover { transform:scale(1.18); z-index:5; opacity:1; box-shadow:0 8px 24px rgba(0,0,0,0.4); }
+  .mk-poi.selected { transform:scale(1.35); z-index:20; opacity:1; box-shadow:0 12px 30px rgba(0,0,0,0.5); }
   .mk-poi.nearest::after {
     content:''; position:absolute; inset:-5px;
     border-radius:50%; border:2px solid currentColor;
@@ -238,7 +277,6 @@
     0%,100% { transform:scale(1); opacity:0.8; }
     50% { transform:scale(1.3); opacity:0; }
   }
-
   .mk-poi.ping-pop::before {
     content:''; position:absolute; inset:-4px;
     border-radius:50%; background:currentColor;
@@ -265,17 +303,14 @@
     box-shadow:0 12px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
     border:1px solid rgba(255,255,255,0.08);
   }
-  .load-wordmark {
-    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:24px;
-    letter-spacing:0.15em; color:#fff;
-  }
+  .load-wordmark { font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:24px; letter-spacing:0.15em; color:#fff; }
   .load-bar-wrap { width:220px; height:4px; background:rgba(255,255,255,0.1); border-radius:4px; overflow:hidden; }
   .load-bar { height:100%; width:0%; background:#fff; border-radius:4px; transition:width 0.5s cubic-bezier(0.2,0.8,0.2,1); }
   .load-text { font-family:'Space Grotesk',sans-serif; font-size:13px; color:rgba(255,255,255,0.7); font-weight:500; letter-spacing:0.02em; }
 
   /* ── TOAST ── */
   #toast {
-    position:fixed; bottom:200px; left:50%; z-index:400;
+    position:fixed; bottom:200px; left:50%; z-index:600;
     transform:translateX(-50%) translateY(10px);
     background:rgba(10,14,22,0.95); color:var(--text);
     padding:10px 22px; border-radius:24px;
@@ -286,7 +321,7 @@
   }
   #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
 
-  /* ── DESKTOP SIDEBAR ── */
+  /* ── DESKTOP ── */
   @media (min-width: 768px) {
     #sheet {
       top:64px; bottom:0; left:auto; right:0; width:340px; max-height:none;
@@ -301,6 +336,34 @@
     #nearby-list { padding-bottom:20px; }
     #locate-btn { top:76px; }
     #toast { bottom:60px; }
+    /* On desktop use the old popup style, hide mobile modal */
+    #poi-modal { display:none; }
+    #modal-overlay { display:none; }
+    .mapboxgl-popup-content {
+      background:rgba(10,14,22,0.98)!important; border:1px solid var(--border)!important;
+      border-radius:16px!important; padding:16px!important;
+      color:var(--text)!important; font-family:'Space Grotesk',sans-serif!important;
+      box-shadow:0 20px 50px rgba(0,0,0,0.8)!important; min-width:200px;
+      backdrop-filter:blur(20px)!important;
+    }
+    .mapboxgl-popup-tip { display:none!important; }
+    .pu-name { font-size:17px; font-weight:700; margin-bottom:4px; }
+    .pu-cat  { font-size:12px; font-family:'Space Mono',monospace; letter-spacing:0.08em; margin-bottom:6px; font-weight:700; display:flex; align-items:center; gap:6px; }
+    .pu-cat svg { width:14px; height:14px; }
+    .pu-addr { font-size:13px; color:var(--muted); margin-bottom:14px; line-height:1.4; }
+    .pu-row  { display:flex; gap:10px; }
+    .pu-btn  {
+      flex:1; padding:12px; background:var(--accent);
+      border:none; border-radius:12px; font-family:'Space Grotesk',sans-serif;
+      font-weight:700; font-size:14px; color:#000; cursor:pointer;
+      letter-spacing:0.04em; transition:transform 0.1s;
+    }
+    .pu-btn:active { transform:scale(0.96); }
+    .pu-btn-sec {
+      padding:12px; background:var(--surface2); border:1px solid var(--border);
+      border-radius:12px; font-family:'Space Grotesk',sans-serif;
+      font-weight:600; font-size:14px; color:var(--text); cursor:pointer;
+    }
   }
 
   /* Center Dot */
@@ -371,29 +434,54 @@
   </div>
 </div>
 
+<!-- Mobile POI Modal -->
+<div id="modal-overlay" onclick="closeModal()"></div>
+<div id="poi-modal">
+  <div class="modal-handle"></div>
+  <div class="modal-inner">
+    <div class="modal-cat-row" id="modal-cat-row">
+      <div class="modal-cat-icon" id="modal-cat-icon"></div>
+      <span id="modal-cat-label"></span>
+    </div>
+    <div class="modal-name" id="modal-name"></div>
+    <div class="modal-addr" id="modal-addr"></div>
+    <div class="modal-meta" id="modal-meta"></div>
+    <div class="modal-actions">
+      <button class="modal-btn-primary" id="modal-focus-btn">Focus &amp; Route</button>
+      <button class="modal-btn-sec" onclick="closeModal()">Dismiss</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
 const TOKEN = 'pk.eyJ1IjoidGFsa2luZ3JpdmVycyIsImEiOiJjbW13MThuZXQycTdqMndwc3FyM3lzOWc3In0.Gg_QTjih_OS0BVk1oT7Kwg';
 mapboxgl.accessToken = TOKEN;
 
-// ── ICONS ──
+const isMobile = () => window.innerWidth < 768;
+
+// ── ICONS (self-contained SVG strings, no size attributes — CSS controls size) ──
+function makeIcon(path) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+}
+
 const ICONS = {
-  mall:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
-  hospital: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8m-4-4h8"/></svg>`,
-  school:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>`,
-  transit:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="14" rx="2"/><path d="M4 11h16M12 3v8M8 17l-2 4m10-4 2 4M7 17h10"/></svg>`,
-  food:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>`,
-  park:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V12M12 12C12 12 7 10 7 6a5 5 0 0 1 10 0c0 4-5 6-5 6z"/><path d="M5 22h14"/></svg>`,
+  mall:     makeIcon('<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>'),
+  hospital: makeIcon('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8m-4-4h8"/>'),
+  school:   makeIcon('<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>'),
+  transit:  makeIcon('<rect x="4" y="3" width="16" height="14" rx="2"/><path d="M4 11h16M12 3v8M8 17l-2 4m10-4 2 4M7 17h10"/>'),
+  food:     makeIcon('<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>'),
+  park:     makeIcon('<path d="M12 22V12M12 12C12 12 7 10 7 6a5 5 0 0 1 10 0c0 4-5 6-5 6z"/><path d="M5 22h14"/>'),
 };
 
 const CATS = {
-  mall:     { label:'Mall',       color:'#f472b6', query:'shopping_mall',           icon: ICONS.mall },
-  hospital: { label:'Hospital',   color:'#34d399', query:'hospital',                icon: ICONS.hospital },
-  school:   { label:'School',     color:'#fbbf24', query:'school',                  icon: ICONS.school },
-  transit:  { label:'Transport',  color:'#818cf8', query:'transit_station',         icon: ICONS.transit },
-  food:     { label:'Food',       color:'#fb923c', query:'restaurant',              icon: ICONS.food },
-  park:     { label:'Park',       color:'#86efac', query:'park',                    icon: ICONS.park },
+  mall:     { label:'Mall',      color:'#f472b6', query:'shopping_mall',   icon:ICONS.mall },
+  hospital: { label:'Hospital',  color:'#34d399', query:'hospital',        icon:ICONS.hospital },
+  school:   { label:'School',    color:'#fbbf24', query:'school',          icon:ICONS.school },
+  transit:  { label:'Transport', color:'#818cf8', query:'transit_station', icon:ICONS.transit },
+  food:     { label:'Food',      color:'#fb923c', query:'restaurant',      icon:ICONS.food },
+  park:     { label:'Park',      color:'#86efac', query:'park',            icon:ICONS.park },
 };
 
 // ── STATE ──
@@ -405,10 +493,11 @@ let selectedPOI = null;
 let acTimer = null;
 let nearestPerCat = {};
 let isDragging = false;
-let sheetState = 'peek'; // peek | expanded | collapsed
+let sheetState = 'peek';
 let touchStartX = null, touchStartY = null, touchStartTime = null, sheetStartY = null;
 let isDraggingSheet = false, dragLocked = false;
 let routeFetchQueue = {};
+let modalPOI = null;
 
 // ── MAP INIT ──
 function init() {
@@ -428,15 +517,15 @@ function init() {
   map.touchZoomRotate.disableRotation();
   map.addControl(new mapboxgl.NavigationControl({ showCompass:false }), 'top-left');
 
-  popup = new mapboxgl.Popup({ closeButton:false, offset:20, maxWidth:'260px', anchor:'bottom' });
+  popup = new mapboxgl.Popup({ closeButton:false, offset:22, maxWidth:'260px', anchor:'bottom' });
 
-  // Tapping map updates Center
   map.on('click', e => {
     if (isDragging) return;
     const features = map.queryRenderedFeatures(e.point);
     if (!features.some(f => f.layer.id.includes('poi'))) {
       setCenter({ lng: e.lngLat.lng, lat: e.lngLat.lat }, true);
       popup.remove();
+      closeModal();
     }
   });
 
@@ -444,10 +533,7 @@ function init() {
   map.on('dragend',   () => { setTimeout(() => isDragging = false, 150); });
 
   map.on('load', () => {
-    // Routes static sources
     map.addSource('routes', { type:'geojson', data:emptyFC() });
-
-    // Inner & Outer static glows
     map.addLayer({ id:'routes-glow-wide', type:'line', source:'routes',
       layout:{ 'line-join':'round','line-cap':'round' },
       paint:{ 'line-color':['get','color'], 'line-width':14, 'line-opacity':0.08, 'line-blur':8 }
@@ -461,7 +547,6 @@ function init() {
       paint:{ 'line-color':['get','color'], 'line-width':3, 'line-opacity':0.9 }
     });
 
-    // Particle Routes (Modern Glowing Dots)
     map.addSource('routes-dots', { type:'geojson', data:emptyFC() });
     map.addLayer({
       id: 'routes-dots-glow', type: 'circle', source: 'routes-dots',
@@ -478,97 +563,64 @@ function init() {
   });
 }
 
-// ── ROUTES & PARTICLES ANIMATION ──
+// ── ROUTE ANIMATION ──
 let routeAnimation;
 function animateRoutes(lineFeatures) {
   cancelAnimationFrame(routeAnimation);
-  let progress = 0;
   let hasPinged = false;
-  
+
   const lines = lineFeatures.map(f => {
     const coords = f.geometry.coordinates;
-    let dists = [0];
-    let total = 0;
+    let dists = [0], total = 0;
     for(let i=1; i<coords.length; i++) {
-      const dx = coords[i][0] - coords[i-1][0];
-      const dy = coords[i][1] - coords[i-1][1];
-      const d = Math.sqrt(dx*dx + dy*dy);
-      total += d;
+      const dx=coords[i][0]-coords[i-1][0], dy=coords[i][1]-coords[i-1][1];
+      total += Math.sqrt(dx*dx+dy*dy);
       dists.push(total);
     }
-    return { coords, dists, totalLength: total, color: f.properties.color, id: f.properties.id };
+    return { coords, dists, totalLength:total, color:f.properties.color, id:f.properties.id };
   }).filter(l => l.totalLength > 0);
 
-  let startTime = null;
-  const animDuration = 1800; // 1.8 seconds duration
-  
+  let progress = 0, startTime = null;
+  const animDuration = 1800;
+
   function updateFrame(time) {
     if (!startTime) startTime = time;
     const elapsed = time - startTime;
 
-    if (!isDragging && lines.length > 0) {
-      if (progress <= 1) {
-        // Calculate speed ramp (easeInOutCubic)
-        let t = Math.min(elapsed / animDuration, 1);
-        progress = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    if (!isDragging && lines.length > 0 && progress <= 1) {
+      let t = Math.min(elapsed / animDuration, 1);
+      progress = t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
 
-        if (progress >= 0.99 && !hasPinged) {
-          hasPinged = true;
-          lines.forEach(line => {
-            if (line.id && poiMarkers[line.id]) {
-               const el = poiMarkers[line.id].el;
-               el.classList.add('ping-pop');
-               setTimeout(() => el.classList.remove('ping-pop'), 600);
-            }
-          });
-        }
-
-        const dotFeatures = [];
-        const drawnLines = [];
-
+      if (progress >= 0.99 && !hasPinged) {
+        hasPinged = true;
         lines.forEach(line => {
-          const targetDist = progress * line.totalLength;
-          let i = 0;
-          while(i < line.dists.length - 2 && line.dists[i+1] < targetDist) i++;
-          
-          const p1 = line.coords[i];
-          const p2 = line.coords[i+1];
-          if (!p1 || !p2) return;
-          
-          const segmentLen = line.dists[i+1] - line.dists[i];
-          const w = segmentLen === 0 ? 0 : (targetDist - line.dists[i]) / segmentLen;
-          const lng = p1[0] + (p2[0] - p1[0]) * w;
-          const lat = p1[1] + (p2[1] - p1[1]) * w;
-          
-          // Always push the dot so it remains permanently at the destination when finished
-          dotFeatures.push({
-            type: 'Feature',
-            properties: { color: line.color },
-            geometry: { type: 'Point', coordinates: [lng, lat] }
-          });
-
-          // Compute sliced coordinates for the drawn line
-          const drawnCoords = line.coords.slice(0, i + 1);
-          drawnCoords.push([lng, lat]);
-          
-          drawnLines.push({
-             type: 'Feature',
-             properties: { color: line.color, id: line.id },
-             geometry: { type: 'LineString', coordinates: drawnCoords }
-          });
+          if (line.id && poiMarkers[line.id]) {
+            const el = poiMarkers[line.id].el;
+            el.classList.add('ping-pop');
+            setTimeout(() => el.classList.remove('ping-pop'), 600);
+          }
         });
-
-        const routeSrc = map.getSource('routes');
-        if (routeSrc) routeSrc.setData({ type:'FeatureCollection', features: drawnLines });
-
-        const dotSrc = map.getSource('routes-dots');
-        if (dotSrc) dotSrc.setData({ type:'FeatureCollection', features: dotFeatures });
       }
+
+      const dotFeatures = [], drawnLines = [];
+      lines.forEach(line => {
+        const targetDist = progress * line.totalLength;
+        let i = 0;
+        while(i < line.dists.length-2 && line.dists[i+1] < targetDist) i++;
+        const p1=line.coords[i], p2=line.coords[i+1];
+        if (!p1||!p2) return;
+        const segLen = line.dists[i+1]-line.dists[i];
+        const w = segLen===0?0:(targetDist-line.dists[i])/segLen;
+        const lng=p1[0]+(p2[0]-p1[0])*w, lat=p1[1]+(p2[1]-p1[1])*w;
+        dotFeatures.push({ type:'Feature', properties:{color:line.color}, geometry:{type:'Point',coordinates:[lng,lat]} });
+        const drawnCoords = [...line.coords.slice(0,i+1), [lng,lat]];
+        drawnLines.push({ type:'Feature', properties:{color:line.color,id:line.id}, geometry:{type:'LineString',coordinates:drawnCoords} });
+      });
+
+      map.getSource('routes')?.setData({type:'FeatureCollection',features:drawnLines});
+      map.getSource('routes-dots')?.setData({type:'FeatureCollection',features:dotFeatures});
     }
-    
-    if (progress < 1) {
-      routeAnimation = requestAnimationFrame(updateFrame);
-    }
+    if (progress < 1) routeAnimation = requestAnimationFrame(updateFrame);
   }
   routeAnimation = requestAnimationFrame(updateFrame);
 }
@@ -581,7 +633,7 @@ function geolocate() {
   navigator.geolocation.getCurrentPosition(
     p => {
       btn.classList.remove('pulsing');
-      setCenter({ lng: p.coords.longitude, lat: p.coords.latitude }, true);
+      setCenter({ lng:p.coords.longitude, lat:p.coords.latitude }, true);
     },
     () => {
       btn.classList.remove('pulsing');
@@ -594,69 +646,60 @@ function geolocate() {
 
 function setCenter(lngLat, fly) {
   userLoc = lngLat;
+  closeModal();
 
   if (userMarker) userMarker.remove();
   const wrap = document.createElement('div');
   wrap.style.cssText = 'position:relative;width:20px;height:20px;';
-  const ring = document.createElement('div');
-  ring.className = 'mk-user-ring';
-  const dot = document.createElement('div');
-  dot.className = 'mk-user';
-  wrap.appendChild(ring);
-  wrap.appendChild(dot);
-  userMarker = new mapboxgl.Marker({ element:wrap, anchor:'center' })
-    .setLngLat([lngLat.lng, lngLat.lat]).addTo(map);
+  const ring = document.createElement('div'); ring.className='mk-user-ring';
+  const dot  = document.createElement('div'); dot.className='mk-user';
+  wrap.appendChild(ring); wrap.appendChild(dot);
+  userMarker = new mapboxgl.Marker({element:wrap,anchor:'center'})
+    .setLngLat([lngLat.lng,lngLat.lat]).addTo(map);
 
   if (fly) {
-    const isDesktop = window.innerWidth >= 768;
+    const isDesktop = !isMobile();
     map.flyTo({
-      center: [lngLat.lng, lngLat.lat],
-      zoom: 14,
-      padding: { bottom: isDesktop ? 0 : 250, right: isDesktop ? 340 : 0 },
-      duration: 1200,
-      easing: t => t < 0.5 ? 2 * t * t : (-1 + (4 - 2 * t) * t),
-      essential: true
+      center:[lngLat.lng,lngLat.lat], zoom:14,
+      padding:{ bottom:isDesktop?0:250, right:isDesktop?340:0 },
+      duration:1200,
+      easing:t=>t<0.5?2*t*t:(-1+(4-2*t)*t),
+      essential:true
     });
   }
 
-  clearMarkers();
-  clearRoutes();
-  selectedPOI = null;
-  nearestPerCat = {};
+  clearMarkers(); clearRoutes();
+  selectedPOI=null; nearestPerCat={};
   resetDetail();
   fetchAll(lngLat);
 }
 
-// ── FETCH ALL POI ──
+// ── FETCH ALL ──
 function fitMapToBounds() {
   if (!userLoc) return;
   const bounds = new mapboxgl.LngLatBounds();
-  bounds.extend([userLoc.lng, userLoc.lat]);
+  bounds.extend([userLoc.lng,userLoc.lat]);
   let added = false;
-  Object.entries(poiMarkers).forEach(([id, {el, wrap}]) => {
-    if (wrap && wrap.style.display !== 'none' && !el.classList.contains('distant')) {
-      const poi = allPOI.find(p => p.id === id);
-      if (poi) { bounds.extend([poi.lng, poi.lat]); added = true; }
+  Object.entries(poiMarkers).forEach(([id,{el,wrap}]) => {
+    if (wrap&&wrap.style.display!=='none'&&!el.classList.contains('distant')) {
+      const poi = allPOI.find(p=>p.id===id);
+      if (poi) { bounds.extend([poi.lng,poi.lat]); added=true; }
     }
   });
-
   if (added) {
-    const isDesktop = window.innerWidth >= 768;
+    const isDesktop = !isMobile();
     map.fitBounds(bounds, {
-      padding: { top: 140, bottom: isDesktop ? 60 : 300, left: 60, right: isDesktop ? 380 : 60 },
-      maxZoom: 15.5,
-      duration: 1600,
-      pitch: 0,
-      essential: true
+      padding:{ top:140, bottom:isDesktop?60:300, left:60, right:isDesktop?380:60 },
+      maxZoom:15.5, duration:1600, pitch:0, essential:true
     });
   }
 }
 
 async function fetchAll(center) {
-  setLoadProgress(50, 'Searching nearby places…');
+  setLoadProgress(50,'Searching nearby places…');
   showLoading();
-  allPOI = [];
-  await Promise.all(Object.keys(CATS).map(k => fetchCat(k, center)));
+  allPOI=[];
+  await Promise.all(Object.keys(CATS).map(k => fetchCat(k,center)));
   findNearestPerCat();
   hideLoading();
   updateCounts();
@@ -675,188 +718,216 @@ async function fetchCat(catKey, center) {
     const r = await fetch(url);
     if (!r.ok) return;
     const d = await r.json();
-    (d.features || []).forEach(f => {
-      const [lng, lat] = f.geometry.coordinates;
+    (d.features||[]).forEach(f => {
+      const [lng,lat] = f.geometry.coordinates;
       const poi = {
-        id: catKey + '_' + (f.properties.mapbox_id || Math.random().toString(36).slice(2)),
-        catKey,
-        name: f.properties.name || 'Unknown',
-        address: f.properties.full_address || f.properties.place_formatted || '',
-        lng, lat,
-        dist: haversine(center, { lng, lat }),
+        id: catKey+'_'+(f.properties.mapbox_id||Math.random().toString(36).slice(2)),
+        catKey, name:f.properties.name||'Unknown',
+        address:f.properties.full_address||f.properties.place_formatted||'',
+        lng, lat, dist:haversine(center,{lng,lat}),
       };
       allPOI.push(poi);
       addMarker(poi);
     });
-    setLoadProgress(50 + Object.keys(CATS).indexOf(catKey) * 8, `Loading ${CATS[catKey].label}…`);
-  } catch(e) { console.warn(catKey, e); }
+    setLoadProgress(50+Object.keys(CATS).indexOf(catKey)*8,`Loading ${CATS[catKey].label}…`);
+  } catch(e) { console.warn(catKey,e); }
 }
 
 function findNearestPerCat() {
-  nearestPerCat = {};
+  nearestPerCat={};
   Object.keys(CATS).forEach(k => {
-    const sorted = allPOI.filter(p => p.catKey === k).sort((a,b) => a.dist - b.dist);
-    if (sorted[0]) nearestPerCat[k] = sorted[0];
+    const sorted = allPOI.filter(p=>p.catKey===k).sort((a,b)=>a.dist-b.dist);
+    if (sorted[0]) nearestPerCat[k]=sorted[0];
   });
   Object.values(nearestPerCat).forEach(poi => {
-    const m = poiMarkers[poi.id];
-    if (m) m.el.classList.add('nearest');
+    if (poiMarkers[poi.id]) poiMarkers[poi.id].el.classList.add('nearest');
   });
 }
 
-// ── REAL ROUTING via Mapbox Directions ──
-async function fetchRoute(from, to) {
-  const key = `${from.lng},${from.lat}-${to.lng},${to.lat}`;
+// ── ROUTING ──
+async function fetchRoute(from,to) {
+  const key=`${from.lng},${from.lat}-${to.lng},${to.lat}`;
   if (routeFetchQueue[key]) return routeFetchQueue[key];
   const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${from.lng},${from.lat};${to.lng},${to.lat}`
     + `?geometries=geojson&overview=full&steps=false&access_token=${TOKEN}`;
-  const promise = fetch(url).then(r => r.json()).then(d => d.routes?.[0]?.geometry || null).catch(() => null);
-  routeFetchQueue[key] = promise;
-  return promise;
+  const p = fetch(url).then(r=>r.json()).then(d=>d.routes?.[0]?.geometry||null).catch(()=>null);
+  routeFetchQueue[key]=p;
+  return p;
 }
 
-// REAL routes on first load instead of point A to B!
 async function drawInitialRoutes() {
   if (!userLoc) return;
   const nearest = Object.values(nearestPerCat);
-  const routeResults = await Promise.all(nearest.map(async p => {
-    const geo = await fetchRoute({lng:userLoc.lng,lat:userLoc.lat}, {lng:p.lng,lat:p.lat});
-    return { poi: p, geo };
+  const results = await Promise.all(nearest.map(async p => {
+    const geo = await fetchRoute({lng:userLoc.lng,lat:userLoc.lat},{lng:p.lng,lat:p.lat});
+    return {poi:p,geo};
   }));
-
-  const features = routeResults.map(({poi, geo}) => {
-    let coords = geo ? [...geo.coordinates] : null;
-    if (coords && coords.length > 0) coords.push([poi.lng, poi.lat]); // bridge exactly to POI marker
-    else coords = [[userLoc.lng,userLoc.lat],[poi.lng,poi.lat]];
-    return {
-      type:'Feature',
-      properties:{ color: CATS[poi.catKey].color, width:2, id: poi.id },
-      geometry: { type:'LineString', coordinates:coords }
-    };
+  const features = results.map(({poi,geo}) => {
+    const coords = geo?[...geo.coordinates,  [poi.lng,poi.lat]]:[[userLoc.lng,userLoc.lat],[poi.lng,poi.lat]];
+    return { type:'Feature', properties:{color:CATS[poi.catKey].color,id:poi.id}, geometry:{type:'LineString',coordinates:coords} };
   });
-  
-  animateRoutes(features.filter(f => f.geometry && f.geometry.type === 'LineString'));
+  animateRoutes(features.filter(f=>f.geometry.type==='LineString'));
 }
 
 async function drawRoutesToPOI(from) {
-  const visible = allPOI.filter(p => p.id !== from.id && activeCats.has(p.catKey));
+  const visible = allPOI.filter(p=>p.id!==from.id&&activeCats.has(p.catKey));
   if (!visible.length) { clearRoutes(); return; }
-
-  const nearby = [...visible].sort((a,b) => (a.d||a.dist) - (b.d||b.dist)).slice(0, 12);
-  const routeResults = await Promise.all(nearby.map(async p => {
-    const geo = await fetchRoute({lng:from.lng,lat:from.lat}, {lng:p.lng,lat:p.lat});
-    return { poi:p, geo };
+  const nearby = [...visible].sort((a,b)=>(a.d||a.dist)-(b.d||b.dist)).slice(0,12);
+  const results = await Promise.all(nearby.map(async p => {
+    const geo = await fetchRoute({lng:from.lng,lat:from.lat},{lng:p.lng,lat:p.lat});
+    return {poi:p,geo};
   }));
-
-  const realFeatures = routeResults.map(({poi,geo}) => {
-    let coords = geo ? [...geo.coordinates] : null;
-    if (coords && coords.length > 0) coords.push([poi.lng, poi.lat]); // bridge exactly to POI marker
-    else coords = [[from.lng,from.lat],[poi.lng,poi.lat]];
-    return {
-      type:'Feature',
-      properties:{ color: CATS[poi.catKey].color, id: poi.id },
-      geometry: { type:'LineString', coordinates:coords }
-    };
+  const realFeatures = results.map(({poi,geo}) => {
+    const coords = geo?[...geo.coordinates,[poi.lng,poi.lat]]:[[from.lng,from.lat],[poi.lng,poi.lat]];
+    return { type:'Feature', properties:{color:CATS[poi.catKey].color,id:poi.id}, geometry:{type:'LineString',coordinates:coords} };
   });
-  
-  const farPOI = visible.slice(12);
-  const farFeatures = farPOI.map(p => ({
-    type:'Feature',
-    properties:{ color: CATS[p.catKey].color, id: p.id },
-    geometry:{ type:'LineString', coordinates:[[from.lng,from.lat],[p.lng,p.lat]] }
+  const farFeatures = visible.slice(12).map(p => ({
+    type:'Feature', properties:{color:CATS[p.catKey].color,id:p.id},
+    geometry:{type:'LineString',coordinates:[[from.lng,from.lat],[p.lng,p.lat]]}
   }));
-
-  const finalFeatures = [...realFeatures,...farFeatures];
-  animateRoutes(finalFeatures.filter(f => f.geometry && f.geometry.type === 'LineString'));
+  animateRoutes([...realFeatures,...farFeatures].filter(f=>f.geometry.type==='LineString'));
 }
 
 // ── MARKERS ──
 function addMarker(poi) {
   const cat = CATS[poi.catKey];
-  
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'position:relative;width:36px;height:36px;';
 
-  const el  = document.createElement('div');
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:relative;width:40px;height:40px;flex-shrink:0;';
+
+  const el = document.createElement('div');
   el.className = 'mk-poi';
-  el.style.cssText = `background:${cat.color}; color:#000; box-shadow:0 6px 16px rgba(0,0,0,0.3); border:2.5px solid #fff;`;
-  el.innerHTML = ICONS[poi.catKey] || '';
+  // FIX: explicit background, border, color on the element itself
+  el.style.cssText = `
+    background:${cat.color};
+    color:#000;
+    box-shadow:0 4px 14px rgba(0,0,0,0.35);
+    border:2.5px solid rgba(255,255,255,0.9);
+    width:40px; height:40px;
+  `;
+  // FIX: insert icon with explicit container size
+  const iconWrap = document.createElement('div');
+  iconWrap.style.cssText = 'width:18px;height:18px;display:flex;align-items:center;justify-content:center;pointer-events:none;flex-shrink:0;';
+  iconWrap.innerHTML = cat.icon;
+  // Ensure inner SVG respects size
+  const svgEl = iconWrap.querySelector('svg');
+  if (svgEl) { svgEl.style.width='18px'; svgEl.style.height='18px'; svgEl.style.display='block'; }
+  el.appendChild(iconWrap);
   wrap.appendChild(el);
 
-  let touched = false;
-  el.addEventListener('touchstart', () => touched=true, {passive:true});
-  el.addEventListener('touchend', e => { if(touched){touched=false;e.stopPropagation();showPopup(poi);} }, {passive:false});
-  el.addEventListener('mouseenter', () => { if(!isDragging) showPopup(poi); });
+  // Touch: show modal on mobile, popup on desktop
+  let tStartX, tStartY, tMoved;
+  el.addEventListener('touchstart', e => {
+    tStartX=e.touches[0].clientX; tStartY=e.touches[0].clientY; tMoved=false;
+  }, {passive:true});
+  el.addEventListener('touchmove', e => {
+    if (Math.abs(e.touches[0].clientX-tStartX)>8||Math.abs(e.touches[0].clientY-tStartY)>8) tMoved=true;
+  }, {passive:true});
+  el.addEventListener('touchend', e => {
+    if (!tMoved) { e.stopPropagation(); e.preventDefault(); onMarkerTap(poi); }
+  }, {passive:false});
+
+  el.addEventListener('mouseenter', () => { if(!isDragging&&!isMobile()) showPopup(poi); });
   el.addEventListener('mouseleave', () => { if(selectedPOI?.id!==poi.id) popup.remove(); });
-  el.addEventListener('click',      e => { e.stopPropagation(); showPopup(poi); });
+  el.addEventListener('click', e => { e.stopPropagation(); onMarkerTap(poi); });
 
-  const marker = new mapboxgl.Marker({ element:wrap, anchor:'center' })
-    .setLngLat([poi.lng, poi.lat]).addTo(map);
-  poiMarkers[poi.id] = { marker, el, wrap };
+  new mapboxgl.Marker({element:wrap,anchor:'center'})
+    .setLngLat([poi.lng,poi.lat]).addTo(map);
+  poiMarkers[poi.id] = { marker: new mapboxgl.Marker({element:wrap,anchor:'center'}), el, wrap };
+
+  // Re-add properly
+  poiMarkers[poi.id].marker.remove();
+  const m2 = new mapboxgl.Marker({element:wrap,anchor:'center'}).setLngLat([poi.lng,poi.lat]).addTo(map);
+  poiMarkers[poi.id].marker = m2;
 }
 
-function clearMarkers() {
-  Object.values(poiMarkers).forEach(m => m.marker.remove());
-  poiMarkers = {}; allPOI = [];
-}
-
-function refreshVis() {
-  let visiblePOI = [];
-  Object.entries(poiMarkers).forEach(([id, {el, wrap}]) => {
-    const poi = allPOI.find(p=>p.id===id);
-    if (poi && activeCats.has(poi.catKey)) {
-      if(wrap) wrap.style.display = 'block';
-      visiblePOI.push(poi);
-    } else {
-      if(wrap) wrap.style.display = 'none';
-      el.classList.remove('distant');
-    }
+// ── MARKER TAP: fly camera first, THEN show modal/popup ──
+function onMarkerTap(poi) {
+  // Always fly camera to marker with nice padding
+  const isDesktop = !isMobile();
+  map.flyTo({
+    center: [poi.lng, poi.lat],
+    zoom: Math.max(map.getZoom(), 15),
+    padding: { bottom: isDesktop ? 0 : 360, right: isDesktop ? 360 : 0, top: 100, left: 40 },
+    duration: 700,
+    easing: t => t < 0.5 ? 2*t*t : (-1+(4-2*t)*t),
+    essential: true
   });
 
-  visiblePOI.sort((a,b) => a.dist - b.dist);
-  visiblePOI.forEach((poi, i) => {
-    const m = poiMarkers[poi.id];
-    if (m) {
-      if (i >= 12) m.el.classList.add('distant');
-      else m.el.classList.remove('distant');
-    }
-  });
-
-  if (selectedPOI && !activeCats.has(selectedPOI.catKey)) {
-    clearRoutes(); resetDetail(); selectedPOI=null;
-    drawInitialRoutes();
+  if (isMobile()) {
+    openModal(poi);
+  } else {
+    showPopup(poi);
   }
-  updateCounts();
 }
 
-// ── SELECT ──
-function select(poi) {
-  if (selectedPOI) poiMarkers[selectedPOI.id]?.el.classList.remove('selected');
-  selectedPOI = poi;
-  poiMarkers[poi.id]?.el.classList.add('selected');
-  popup.remove();
-  const isDesktop = window.innerWidth >= 768;
-  map.flyTo({ center:[poi.lng,poi.lat], zoom:15, padding: { bottom: isDesktop ? 0 : 380, right: isDesktop ? 360 : 0 }, duration:1000,
-              easing:t=>t<0.5?2*t*t:(-1+(4-2*t)*t), essential:true });
-  updateDetail(poi);
-  drawRoutesToPOI(poi);
-  populateNearby(poi);
-  expandSheet();
+// ── MOBILE MODAL ──
+function openModal(poi) {
+  const cat = CATS[poi.catKey];
+  modalPOI = poi;
+
+  const catRow = document.getElementById('modal-cat-row');
+  catRow.style.color = cat.color;
+
+  const iconEl = document.getElementById('modal-cat-icon');
+  iconEl.innerHTML = cat.icon;
+  const sv = iconEl.querySelector('svg');
+  if (sv) { sv.style.width='18px'; sv.style.height='18px'; sv.style.stroke=cat.color; }
+
+  document.getElementById('modal-cat-label').textContent = cat.label.toUpperCase();
+  document.getElementById('modal-name').textContent = poi.name;
+  document.getElementById('modal-addr').textContent = poi.address || 'No address available';
+
+  const dist = fmt(poi.dist);
+  document.getElementById('modal-meta').innerHTML = `
+    <div class="modal-meta-chip" style="color:var(--accent);">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
+      ${dist}
+    </div>
+    <div class="modal-meta-chip">
+      <div style="width:9px;height:9px;border-radius:50%;background:${cat.color};flex-shrink:0;box-shadow:0 0 6px ${cat.color}80;"></div>
+      ${cat.label}
+    </div>
+  `;
+
+  document.getElementById('modal-focus-btn').onclick = () => {
+    closeModal();
+    select(poi);
+  };
+
+  document.getElementById('poi-modal').classList.add('open');
+  document.getElementById('modal-overlay').classList.add('active');
 }
 
-// ── POPUP ──
+function closeModal() {
+  document.getElementById('poi-modal').classList.remove('open');
+  document.getElementById('modal-overlay').classList.remove('active');
+  modalPOI = null;
+}
+
+// swipe down to close modal
+let modalTouchStart = 0;
+document.getElementById('poi-modal').addEventListener('touchstart', e => {
+  modalTouchStart = e.touches[0].clientY;
+}, {passive:true});
+document.getElementById('poi-modal').addEventListener('touchend', e => {
+  if (e.changedTouches[0].clientY - modalTouchStart > 60) closeModal();
+}, {passive:true});
+
+// ── POPUP (desktop) ──
 function showPopup(poi) {
   const cat = CATS[poi.catKey];
   const sk  = safeKey(poi.id);
   window['_p'+sk] = poi;
-  popup.setLngLat([poi.lng, poi.lat]).setHTML(`
+  popup.setLngLat([poi.lng,poi.lat]).setHTML(`
     <div class="pu-name">${esc(poi.name)}</div>
-    <div class="pu-cat" style="color:${cat.color}; display:flex; align-items:center; gap:6px;">
-      <span style="width:14px;height:14px;display:flex;">${cat.icon}</span> ${cat.label.toUpperCase()}
+    <div class="pu-cat" style="color:${cat.color};">
+      <span style="width:14px;height:14px;display:flex;">${cat.icon}</span>
+      ${cat.label.toUpperCase()}
     </div>
     <div class="pu-addr">${esc(poi.address)||'—'}</div>
     <div class="pu-row">
-      <button class="pu-btn" onclick="select(window['_p${sk}'])">Focus & Route</button>
+      <button class="pu-btn" onclick="select(window['_p${sk}'])">Focus &amp; Route</button>
       <button class="pu-btn-sec" onclick="setCenter({lng:${poi.lng},lat:${poi.lat}},true)">Center Here</button>
     </div>
   `).addTo(map);
@@ -869,66 +940,82 @@ function clearRoutes() {
   cancelAnimationFrame(routeAnimation);
 }
 
+// ── SELECT (from list or modal) ──
+function select(poi) {
+  if (selectedPOI) poiMarkers[selectedPOI.id]?.el.classList.remove('selected');
+  selectedPOI = poi;
+  poiMarkers[poi.id]?.el.classList.add('selected');
+  popup.remove();
+  closeModal();
+
+  const isDesktop = !isMobile();
+  map.flyTo({
+    center:[poi.lng,poi.lat], zoom:15,
+    padding:{ bottom:isDesktop?0:380, right:isDesktop?360:0, top:100 },
+    duration:1000,
+    easing:t=>t<0.5?2*t*t:(-1+(4-2*t)*t),
+    essential:true
+  });
+
+  updateDetail(poi);
+  drawRoutesToPOI(poi);
+  populateNearby(poi);
+  expandSheet();
+}
+
 // ── DETAIL PANEL ──
 function updateDetail(poi) {
   const cat = CATS[poi.catKey];
   const badge = document.getElementById('detail-badge');
   badge.innerHTML = `<span style="color:${cat.color};display:flex;width:14px;height:14px;">${cat.icon}</span>&nbsp;${cat.label.toUpperCase()}`;
-  badge.style.color = cat.color;
-  badge.style.background = `${cat.color}18`;
-  document.getElementById('detail-name').textContent = poi.name;
-  document.getElementById('detail-addr').textContent = poi.address || 'No address available';
+  badge.style.color=cat.color; badge.style.background=`${cat.color}18`;
+  document.getElementById('detail-name').textContent=poi.name;
+  document.getElementById('detail-addr').textContent=poi.address||'No address available';
 }
 
 function resetDetail() {
   const badge = document.getElementById('detail-badge');
-  badge.innerHTML = 'TAP A MARKER';
-  badge.style.cssText = '';
-  document.getElementById('detail-name').textContent = 'NEAR you';
-  document.getElementById('detail-addr').textContent = 'Showing nearest per category';
+  badge.innerHTML='TAP A MARKER'; badge.style.cssText='';
+  document.getElementById('detail-name').textContent='NEAR you';
+  document.getElementById('detail-addr').textContent='Showing nearest per category';
 }
 
 function populateNearby(from) {
   const items = allPOI
-    .filter(p => p.id!==from.id && activeCats.has(p.catKey))
-    .map(p => ({...p, d: haversine({lng:from.lng,lat:from.lat},{lng:p.lng,lat:p.lat})}))
-    .sort((a,b) => a.d - b.d)
-    .slice(0, 40);
+    .filter(p=>p.id!==from.id&&activeCats.has(p.catKey))
+    .map(p=>({...p, d:haversine({lng:from.lng,lat:from.lat},{lng:p.lng,lat:p.lat})}))
+    .sort((a,b)=>a.d-b.d).slice(0,40);
   renderNearbyList(items, from.id);
 }
 
 function populateNearbyDefault() {
-  const items = allPOI
-    .filter(p => activeCats.has(p.catKey))
-    .sort((a,b) => a.dist - b.dist)
-    .slice(0, 40);
-  document.getElementById('nearby-count').textContent = `${items.length} places`;
+  const items = allPOI.filter(p=>activeCats.has(p.catKey)).sort((a,b)=>a.dist-b.dist).slice(0,40);
+  document.getElementById('nearby-count').textContent=`${items.length} places`;
   renderNearbyList(items, null);
 }
 
 function renderNearbyList(items, fromId) {
   const list = document.getElementById('nearby-list');
-  document.getElementById('nearby-count').textContent = `${items.length} places`;
+  document.getElementById('nearby-count').textContent=`${items.length} places`;
   if (!items.length) {
-    list.innerHTML = `<div style="padding:40px 20px;text-align:center;color:var(--muted);font-size:13px;font-family:'Space Mono',monospace;">Nothing found</div>`;
+    list.innerHTML=`<div style="padding:40px 20px;text-align:center;color:var(--muted);font-size:13px;font-family:'Space Mono',monospace;">Nothing found</div>`;
     return;
   }
   list.innerHTML = items.map(p => {
-    const cat = CATS[p.catKey];
-    const sk  = safeKey(p.id);
-    const isNearest = nearestPerCat[p.catKey]?.id === p.id;
-    window['_p'+sk] = p;
+    const cat=CATS[p.catKey], sk=safeKey(p.id);
+    const isNearest = nearestPerCat[p.catKey]?.id===p.id;
+    window['_p'+sk]=p;
     return `<div class="nearby-item" onclick="select(window['_p${sk}'])">
       <div class="ni-pip" style="background:${cat.color};box-shadow:0 0 8px ${cat.color}80;"></div>
       <div class="ni-info">
         <div class="ni-name">${esc(p.name)}</div>
-        <div class="ni-sub" style="display:flex;align-items:center;gap:6px;">
-          <span style="color:${cat.color};width:14px;height:14px;display:flex;">${cat.icon}</span>
+        <div class="ni-sub">
+          <span class="ni-sub-icon" style="color:${cat.color};">${cat.icon}</span>
           <span>${cat.label}</span>
-          ${isNearest ? `<span class="ni-nearest-badge">NEAREST</span>` : ''}
+          ${isNearest?`<span class="ni-nearest-badge">NEAREST</span>`:''}
         </div>
       </div>
-      <div class="ni-dist">${fmt(p.d ?? p.dist)}</div>
+      <div class="ni-dist">${fmt(p.d??p.dist)}</div>
     </div>`;
   }).join('');
 }
@@ -938,17 +1025,17 @@ function buildFilters() {
   document.getElementById('filter-bar').innerHTML = Object.entries(CATS).map(([k,c]) => `
     <button class="cat-pill active" data-cat="${k}" onclick="toggleCat('${k}')">
       <div class="pill-dot" style="background:${c.color};box-shadow:0 0 8px ${c.color}80;"></div>
-      <span style="width:16px;height:16px;display:flex;align-items:center;justify-content:center;">${c.icon}</span>
+      <span class="pill-icon">${c.icon}</span>
       ${c.label}
       <span class="pill-cnt" id="cnt-${k}">0</span>
     </button>`).join('');
 }
 
 function toggleCat(k) {
-  activeCats.has(k) ? activeCats.delete(k) : activeCats.add(k);
-  const btn = document.querySelector(`[data-cat="${k}"]`);
-  btn.classList.toggle('active', activeCats.has(k));
-  btn.classList.toggle('off', !activeCats.has(k));
+  activeCats.has(k)?activeCats.delete(k):activeCats.add(k);
+  const btn=document.querySelector(`[data-cat="${k}"]`);
+  btn.classList.toggle('active',activeCats.has(k));
+  btn.classList.toggle('off',!activeCats.has(k));
   refreshVis();
   if (selectedPOI) { drawRoutesToPOI(selectedPOI); populateNearby(selectedPOI); }
   else { drawInitialRoutes(); populateNearbyDefault(); fitMapToBounds(); }
@@ -956,18 +1043,36 @@ function toggleCat(k) {
 
 function updateCounts() {
   Object.keys(CATS).forEach(k => {
-    const el = document.getElementById('cnt-'+k);
-    if (el) el.textContent = allPOI.filter(p=>p.catKey===k).length;
+    const el=document.getElementById('cnt-'+k);
+    if (el) el.textContent=allPOI.filter(p=>p.catKey===k).length;
   });
+}
+
+function refreshVis() {
+  let visiblePOI=[];
+  Object.entries(poiMarkers).forEach(([id,{el,wrap}]) => {
+    const poi=allPOI.find(p=>p.id===id);
+    if (poi&&activeCats.has(poi.catKey)) { if(wrap)wrap.style.display='block'; visiblePOI.push(poi); }
+    else { if(wrap)wrap.style.display='none'; el.classList.remove('distant'); }
+  });
+  visiblePOI.sort((a,b)=>a.dist-b.dist);
+  visiblePOI.forEach((poi,i) => {
+    const m=poiMarkers[poi.id];
+    if (m) { if(i>=12)m.el.classList.add('distant'); else m.el.classList.remove('distant'); }
+  });
+  if (selectedPOI&&!activeCats.has(selectedPOI.catKey)) {
+    clearRoutes(); resetDetail(); selectedPOI=null; drawInitialRoutes();
+  }
+  updateCounts();
 }
 
 // ── SHEET GESTURES ──
 const sheet = document.getElementById('sheet');
 const handle = document.getElementById('sheet-handle');
 
-function expandSheet()  { sheetState='expanded'; sheet.className=''; sheet.classList.add('expanded'); }
-function peekSheet()    { sheetState='peek';     sheet.className=''; sheet.classList.add('peek'); }
-function collapseSheet(){ sheetState='collapsed';sheet.className=''; sheet.classList.add('collapsed'); }
+function expandSheet()   { sheetState='expanded'; sheet.className=''; sheet.classList.add('expanded'); }
+function peekSheet()     { sheetState='peek';     sheet.className=''; sheet.classList.add('peek'); }
+function collapseSheet() { sheetState='collapsed';sheet.className=''; sheet.classList.add('collapsed'); }
 
 handle.addEventListener('click', () => {
   if (sheetState==='peek') expandSheet();
@@ -976,92 +1081,69 @@ handle.addEventListener('click', () => {
 });
 
 function initDrag(e) {
-  touchStartX = e.touches[0].clientX;
-  touchStartY = e.touches[0].clientY;
-  touchStartTime = Date.now();
-  sheetStartY = sheet.getBoundingClientRect().top;
-  isDraggingSheet = false;
-  dragLocked = false;
+  touchStartX=e.touches[0].clientX; touchStartY=e.touches[0].clientY;
+  touchStartTime=Date.now(); sheetStartY=sheet.getBoundingClientRect().top;
+  isDraggingSheet=false; dragLocked=false;
 }
 
-handle.addEventListener('touchstart', initDrag, {passive:true});
-document.getElementById('filter-bar').addEventListener('touchstart', initDrag, {passive:true});
-document.getElementById('detail-area').addEventListener('touchstart', initDrag, {passive:true});
-document.querySelector('.nearby-head').addEventListener('touchstart', initDrag, {passive:true});
+handle.addEventListener('touchstart',initDrag,{passive:true});
+document.getElementById('filter-bar').addEventListener('touchstart',initDrag,{passive:true});
+document.getElementById('detail-area').addEventListener('touchstart',initDrag,{passive:true});
+document.querySelector('.nearby-head').addEventListener('touchstart',initDrag,{passive:true});
 
 document.addEventListener('touchmove', e => {
-  if (touchStartY === null) return;
-  const dx = e.touches[0].clientX - touchStartX;
-  const dy = e.touches[0].clientY - touchStartY;
-  
+  if (touchStartY===null) return;
+  const dx=e.touches[0].clientX-touchStartX, dy=e.touches[0].clientY-touchStartY;
   if (!dragLocked) {
-    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) {
-      touchStartY = null; // abort vertical drag attempt due to horizontal panning
-      return;
-    } else if (Math.abs(dy) > 10) {
-      dragLocked = true;
-      isDraggingSheet = true;
-    }
+    if (Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>10) { touchStartY=null; return; }
+    else if (Math.abs(dy)>10) { dragLocked=true; isDraggingSheet=true; }
   }
-
   if (isDraggingSheet) {
-    sheet.style.transition = 'none';
-    const newTop = Math.max(window.innerHeight*0.15, sheetStartY + dy);
-    sheet.style.transform = `translateY(${newTop - sheetStartY > 0 ? newTop - sheetStartY : 0}px)`;
+    sheet.style.transition='none';
+    const newTop=Math.max(window.innerHeight*0.15,sheetStartY+dy);
+    sheet.style.transform=`translateY(${newTop-sheetStartY>0?newTop-sheetStartY:0}px)`;
   }
-}, {passive:true});
+},{passive:true});
 
 document.addEventListener('touchend', e => {
-  if (touchStartY === null) return;
-  sheet.style.transition = '';
-  sheet.style.transform = '';
-  const dy = e.changedTouches[0].clientY - touchStartY;
-  const timeDiff = Date.now() - touchStartTime;
-  const velocity = Math.abs(dy) / (timeDiff || 1);
-
+  if (touchStartY===null) return;
+  sheet.style.transition=''; sheet.style.transform='';
+  const dy=e.changedTouches[0].clientY-touchStartY;
+  const velocity=Math.abs(dy)/((Date.now()-touchStartTime)||1);
   if (isDraggingSheet) {
-    if (dy < -50 || (dy < 0 && velocity > 0.8)) expandSheet();
-    else if (dy > 50 || (dy > 0 && velocity > 0.8)) {
-      if (sheetState==='expanded') peekSheet();
-      else collapseSheet();
-    } else {
-      if (sheetState==='expanded') expandSheet();
-      else if (sheetState==='peek') peekSheet();
-      else collapseSheet();
-    }
+    if (dy<-50||(dy<0&&velocity>0.8)) expandSheet();
+    else if (dy>50||(dy>0&&velocity>0.8)) { if(sheetState==='expanded')peekSheet(); else collapseSheet(); }
+    else { if(sheetState==='expanded')expandSheet(); else if(sheetState==='peek')peekSheet(); else collapseSheet(); }
   }
-  
-  touchStartY = null;
-  isDraggingSheet = false;
-  dragLocked = false;
-}, {passive:true});
+  touchStartY=null; isDraggingSheet=false; dragLocked=false;
+},{passive:true});
 
 peekSheet();
 
 // ── SEARCH AUTOCOMPLETE ──
 document.getElementById('search-input').addEventListener('input', function() {
-  const q = this.value.trim();
+  const q=this.value.trim();
   clearTimeout(acTimer);
-  if (q.length < 3) { hideAC(); return; }
-  acTimer = setTimeout(() => autocomplete(q), 280);
+  if (q.length<3){hideAC();return;}
+  acTimer=setTimeout(()=>autocomplete(q),280);
 });
-document.getElementById('search-input').addEventListener('keydown', e => { if(e.key==='Escape') hideAC(); });
-document.addEventListener('click', e => { if(!e.target.closest('#search-wrap')) hideAC(); });
+document.getElementById('search-input').addEventListener('keydown',e=>{if(e.key==='Escape')hideAC();});
+document.addEventListener('click',e=>{if(!e.target.closest('#search-wrap'))hideAC();});
 
 async function autocomplete(q) {
-  const prox = userLoc ? `&proximity=${userLoc.lng},${userLoc.lat}` : '';
-  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`
-    + `?access_token=${TOKEN}&autocomplete=true&limit=6&language=en${prox}`;
+  const prox=userLoc?`&proximity=${userLoc.lng},${userLoc.lat}`:'';
+  const url=`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`
+    +`?access_token=${TOKEN}&autocomplete=true&limit=6&language=en${prox}`;
   try {
-    const d = await (await fetch(url)).json();
-    if (!d.features?.length) { hideAC(); return; }
+    const d=await(await fetch(url)).json();
+    if (!d.features?.length){hideAC();return;}
     renderAC(d.features);
-  } catch { hideAC(); }
+  } catch {hideAC();}
 }
 
 function renderAC(fs) {
-  const box = document.getElementById('ac-list');
-  box.innerHTML = fs.map((f,i) => `
+  const box=document.getElementById('ac-list');
+  box.innerHTML=fs.map((f,i)=>`
     <div class="ac-item" data-i="${i}">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
         <path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/>
@@ -1072,52 +1154,51 @@ function renderAC(fs) {
         <div class="ac-place">${esc(f.place_name)}</div>
       </div>
     </div>`).join('');
-  box.querySelectorAll('.ac-item').forEach(el => {
-    el.addEventListener('click', () => {
-      const f = fs[+el.dataset.i];
-      document.getElementById('search-input').value = f.place_name;
+  box.querySelectorAll('.ac-item').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const f=fs[+el.dataset.i];
+      document.getElementById('search-input').value=f.place_name;
       hideAC();
-      setCenter({ lng:f.center[0], lat:f.center[1] }, true);
+      setCenter({lng:f.center[0],lat:f.center[1]},true);
     });
   });
-  box.style.display = 'block';
+  box.style.display='block';
 }
-function hideAC() { document.getElementById('ac-list').style.display='none'; }
+function hideAC(){document.getElementById('ac-list').style.display='none';}
 
 // ── LOCATE BUTTON ──
-document.getElementById('locate-btn').addEventListener('click', () => {
-  const btn = document.getElementById('locate-btn');
-  btn.disabled = true;
-  btn.classList.add('pulsing');
+document.getElementById('locate-btn').addEventListener('click',()=>{
+  const btn=document.getElementById('locate-btn');
+  btn.disabled=true; btn.classList.add('pulsing');
   geolocate();
-  setTimeout(() => { btn.disabled=false; btn.classList.remove('pulsing'); }, 5000);
+  setTimeout(()=>{btn.disabled=false;btn.classList.remove('pulsing');},5000);
 });
 
 // ── UTILS ──
-function haversine(a,b) {
+function haversine(a,b){
   const R=6371000,r=x=>x*Math.PI/180;
   const dLat=r(b.lat-a.lat),dLng=r(b.lng-a.lng);
   return 2*R*Math.asin(Math.sqrt(Math.sin(dLat/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2));
 }
-function fmt(m) { return m>=1000?(m/1000).toFixed(1)+' km':Math.round(m)+' m'; }
-function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function safeKey(id) { return id.replace(/[^a-z0-9]/gi,'_'); }
-function emptyFC() { return {type:'FeatureCollection',features:[]}; }
+function fmt(m){return m>=1000?(m/1000).toFixed(1)+' km':Math.round(m)+' m';}
+function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function safeKey(id){return id.replace(/[^a-z0-9]/gi,'_');}
+function emptyFC(){return{type:'FeatureCollection',features:[]};}
 
-function toast(msg) {
+function toast(msg){
   const t=document.getElementById('toast');
   t.textContent=msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),3000);
 }
-function showLoading() { document.getElementById('loading').classList.remove('hidden'); }
-function hideLoading() { document.getElementById('loading').classList.add('hidden'); }
-function setLoadProgress(pct, txt) {
-  document.getElementById('load-bar').style.width = pct+'%';
-  if (txt) document.getElementById('load-text').textContent = txt;
+function showLoading(){document.getElementById('loading').classList.remove('hidden');}
+function hideLoading(){document.getElementById('loading').classList.add('hidden');}
+function setLoadProgress(pct,txt){
+  document.getElementById('load-bar').style.width=pct+'%';
+  if(txt)document.getElementById('load-text').textContent=txt;
 }
 
 init();
-setLoadProgress(20, 'Loading map…');
+setLoadProgress(20,'Loading map…');
 </script>
 </body>
 </html>
