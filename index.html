@@ -298,10 +298,15 @@
   }
   #loading.hidden { opacity:0; visibility:hidden; }
   .load-app-icon {
-    width:72px; height:72px; border-radius:20px; background:var(--surface);
+    width:80px; height:80px; border-radius:24px; background:rgba(20,26,38,0.85);
     display:flex; align-items:center; justify-content:center;
-    box-shadow:0 12px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
-    border:1px solid rgba(255,255,255,0.08);
+    box-shadow:0 20px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15);
+    border:1px solid rgba(255,255,255,0.1);
+    animation: iconFloat 4s ease-in-out infinite;
+  }
+  @keyframes iconFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); box-shadow: 0 30px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15); }
   }
   .load-wordmark { font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:24px; letter-spacing:0.15em; color:#fff; }
   .load-bar-wrap { width:220px; height:4px; background:rgba(255,255,255,0.1); border-radius:4px; overflow:hidden; }
@@ -933,7 +938,12 @@ function showPopup(poi) {
   `).addTo(map);
 }
 
-// ── ROUTES ──
+// ── MARKERS & ROUTES VISIBILITY ──
+function clearMarkers() {
+  Object.values(poiMarkers).forEach(m => m.marker.remove());
+  poiMarkers = {}; allPOI = [];
+}
+
 function clearRoutes() {
   map.getSource('routes')?.setData(emptyFC());
   map.getSource('routes-dots')?.setData(emptyFC());
